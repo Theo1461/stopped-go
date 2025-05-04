@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Canvas Bus Simulation</title>
+  <style>
+    canvas {
+      background: #e0f7fa;
+      display: block;
+      margin: 0 auto;
+      width: 750px;
+      height: 450px;
+    }
+    .buttons-container {
+      position: fixed;
+      top: 50%;
+      left: 10px;
+      transform: translateY(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 10; /* Keep buttons on top of the canvas */
+    }
+
+    /* Button styles */
+    .button {
+      background-color: #444;
+      color: white;
+      font-size: 24px;
+      width: 60px;
+      height: 40px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin: 10px 0;
+      text-align: center;
+      border: none;
+      cursor: pointer;
+      border-radius: 5px;
+    }
+
+    .button:active {
+      background-color: #555; /* Change color on button press */
+    }
+  </style>
+</head>
+<body>
+  <canvas id="busCanvas" width="1000" height="600"></canvas>
+  <div class="buttons-container">
+    <button class="button" id="forwardBtn">∧</button>
+    <button class="button" id="reverseBtn">∨</button>
+    <button class="button" id="brakeBtn">|||</button>
+    <button class="button" id="stopBtn">[][]</button>
+    </div>
+  <script>
+
+    // Event listeners for button clicks
+    document.getElementById('forwardBtn').addEventListener('click', () => {
+      const forwardBtn = document.getElementById('forwardBtn');
+
+    })
+
+    document.getElementById('reverseBtn').addEventListener('click', () => {
+const reverseBtn = document.getElementById('reverseBtn');
+
+
+    });
+
+    document.getElementById('brakeBtn').addEventListener('click', () => {
+      const brakeBtn = document.getElementById('brakeBtn');
+
+// Brake activation on press
+brakeBtn.addEventListener('mousedown', () => { bBrake = true; });
+brakeBtn.addEventListener('touchstart', () => { bBrake = true; }, { passive: true });
+    
+
+// Brake deactivation on release
+brakeBtn.addEventListener('mouseup', () => { bBrake = false; });
+brakeBtn.addEventListener('touchend', () => { bBrake = false; }, { passive: true });
+    })
+    document.getElementById('stopBtn').addEventListener('click', () => {
+      stopped = !stopped;
+        if (stopped) {
+          bus.y -= 1;
+        } else {
+          bus.y += 1;
+        }
+    })
+// Handle touchstart event for brak
+
+    const canvas = document.getElementById('busCanvas');
+    const ctx = canvas.getContext('2d');
+    
+let forwardPressed = false;
+let reversePressed = false;
+
+    let keys = {};
+    let stopped = false;
+    let bBrake = false;
+    let stopRequested = false;
+
+    let camX = 0;
+    let targetCamX = 0;
+
+    let tilt = 0; // Angle for bus body tilt in degrees
+    let tiltSpeed = 3; // Tilt speed (faster)
+    const tiltMax = 15; // Maximum tilt angle in degrees
+    let speedLocked = false;
+    const LIMIT = 32767;
+
+
+
+    const bus = {
+
+      x: 100,
+      y: 350,
+      width: 400,
+      height: 200,
+      vx: 0,
+      ax: 0.1,
+      friction: 0.0005,
+      wheelAngle: 0,
+      wheelY: 0, // For wheel vertical position change
+      passengers: [],
+      stops: [],
+      proximityActive: false,
+      update() {
+
+
+if (bBrake) {
+  bus.vx *= 0.99;
+  if (Math.abs(bus.vx) < 0.2) bus.vx = 0;
+  speedLocked = false
+} else {
+  if (!speedLocked) {
+    if (!keys.ArrowLeft && !keys.ArrowRight || stopped) {
+      bus.vx *= (1 - bus.friction);
+      if (Math.abs(bus.vx) < 0.01) bus.vx = 0;
+    }
+
+    if (!stopped) {
+      if (keys.ArrowLeft) bus.vx -= bus.ax;
+      if (keys.ArrowRight) bus.vx += bus.ax;
+    }
+  }
+}
+const forwardBtn = document.getElementById('forwardBtn');
+const reverseBtn = document.getElementById('reverseBtn');
+
+forwardBtn.addEventListener('mousedown', () => { forwardPressed = true; });
+forwardBtn.addEventListener('mouseup', () => { forwardPressed = false; });
+forwardBtn.addEventListener('touchstart', () => { forwardPressed = true; }, { passive: true });
+forwardBtn.addEventListener('touchend', () => { forwardPressed = false; }, { passive: true });
+
+reverseBtn.addEventListener('touchstart', () => { reversePressed = true; }, { passive: true });
+reverseBtn.addEventListener('touchend', () => { reversePressed = false; }, { passive: true });
+reverseBtn.addEventListener('mousedown', () => { reversePressed = true; });
+reverseBtn.addEventListener('mouseup', () => { reversePressed = false; });
+
+if (bBrake) {
+  bus.vx *= 0.99;
+  if (Math.abs(bus.vx) < 0.2) bus.vx = 0;
+  speedLocked = false;
+} else {
+  if (!speedLocked) {
+    const noInput = (
+      (!keys.ArrowLeft && !keys.ArrowRight && !forwardPressed && !reversePressed)
+      || stopped
+    );
+
+    if (!stopped) {
+      if (keys.ArrowLeft || reversePressed) bus.vx -= bus.ax;
+      if (keys.ArrowRight || forwardPressed) bus.vx += bus.ax;
+    }
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  keys[e.key.toLowerCase()] = true;
+
+  if (e.key.toLowerCase() === 'f') {
+    speedLocked = !speedLocked;
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  keys[e.key.toLowerCase()] = false;
+});
+
+        this.x += this.vx;
+        this.wheelAngle += this.vx / 10;
+        checkStopRequest();
+
+        const neededStops = Math.ceil((this.x + 50000) / 3000);
+        while (this.stops.length < neededStops) {
+          const newStopX = this.stops.length * 20000;
+          this.stops.push({
+            x: newStopX,
+            y: this.y + this.height + 100,
+            passengers: Array(Math.floor(Math.random() * 4) + 1).fill({})
+          });
+        }
+
+        this.proximityActive = false;
+
+        this.stops = this.stops.filter(stop => {
+          const dx = (this.x + this.width / 2) - stop.x;
+          if (Math.abs(dx) < 2500) {
+            this.proximityActive = true;
+          }
+
+          if (Math.abs(dx) < 500 && bus.vx === 0) {
+            if (stop.passengers.length > 0) {
+              // Add passengers to the bus (once)
+              this.passengers.push(...stop.passengers);
+              stop.passengers = [];  // Clear the stop's passengers after they've boarded
+            }
+
+            if (stopRequested && Math.abs(dx) < 500 && this.passengers.length > 0 && bus.vx === 0) {
+              // Remove one passenger from the bus when stop requested
+              this.passengers.pop();  // Removes the last passenger added to the bus
+              stopRequested = false;
+            }
+          }
+
+          return stop.passengers.length > 0;
+        });
+      },
+      draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+// Road with gradient
+const roadGradient = ctx.createLinearGradient(0, this.y + this.height + 30, 0, this.y + this.height + 130);
+
+// Define gradient stops
+roadGradient.addColorStop(0, '#aaa'); // Lighter color at the beginning
+roadGradient.addColorStop(0.5, '#888'); // Mid-tone color in the middle
+roadGradient.addColorStop(1, '#666'); // Darker color at the end
+
+// Apply gradient to road
+ctx.fillStyle = roadGradient;
+ctx.fillRect(0, this.y + this.height + 30, canvas.width, 100);
+
+// Bus body (Tilted)
+ctx.save(); // Save the current state
+ctx.translate(this.x - camX + this.width / 2, this.y + this.height / 2); // Move to center of bus body
+ctx.rotate(tilt * Math.PI / 180); // Apply tilt in degrees
+ctx.translate(-(this.x - camX + this.width / 2), -(this.y + this.height / 2)); // Restore position
+
+// Create a linear gradient for the bus body
+const busGradient = ctx.createLinearGradient(this.x - camX, this.y + this.height, this.x - camX + this.width, this.y);
+busGradient.addColorStop(0, 'rgba(100, 100, 100, 0.4)');  // Dark gray starting from bottom-left
+busGradient.addColorStop(1, 'rgba(211, 211, 211, 1)'); // Lighter gray at top-right
+
+// Apply the gradient to the bus body
+ctx.beginPath();
+ctx.moveTo(this.x - camX, this.y);
+ctx.lineTo(this.x - camX, this.y + this.height);
+ctx.lineTo(this.x - camX + this.width, this.y + this.height);
+ctx.bezierCurveTo(
+  this.x - camX + this.width + 63,
+  this.y + this.height - 15,
+  this.x - camX + this.width + 63,
+  this.y + 10,
+  this.x - camX + this.width,
+  this.y
+);
+ctx.lineTo(this.x - camX, this.y);
+ctx.closePath();
+ctx.fillStyle = busGradient;
+ctx.fill();
+
+// Restore the state after applying the bus body gradient
+ctx.restore();
+
+        // Draw door and windows (Tilted)
+        ctx.fillStyle = 'black';
+// Draw double door with bluish tint, reflection, and shine (Tilted)
+ctx.save(); // Save the current state for transformation
+
+// Door gradient (bluish tint with reflection effect)
+const doorGradient = ctx.createLinearGradient(0, 0, 0, 130);
+doorGradient.addColorStop(0, 'rgba(50, 80, 100, 0.7)'); // Bluish tint (top)
+doorGradient.addColorStop(1, 'rgba(20, 30, 40, 0.8)'); // Darker bluish tint (bottom)
+
+// Draw left side of the double door (left half)
+ctx.fillStyle = doorGradient;
+ctx.fillRect(this.x - camX + 315, this.y + 40, 40, 130);  // Left half of the door
+
+// Draw right side of the double door (right half)
+ctx.fillStyle = doorGradient;
+ctx.fillRect(this.x - camX + 355, this.y + 40, 40, 130);  // Right half of the door
+
+// Reflection shine on the door (top shine)
+ctx.save();
+ctx.globalAlpha = 0.2; // Make the shine semi-transparent
+const shineGradient = ctx.createLinearGradient(0, this.y + 40, 0, this.y + 50);
+shineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)'); // Light shine at the top
+shineGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fade out at the bottom
+ctx.fillStyle = shineGradient;
+ctx.fillRect(this.x - camX + 315, this.y + 40, 80, 10); // Shine across both doors
+ctx.restore();
+
+// Add some subtle light reflection (optional) at the bottom of the door
+ctx.save();
+ctx.globalAlpha = 0.15; // Light reflection transparency
+const lightReflection = ctx.createLinearGradient(0, this.y + 110, 0, this.y + 130);
+lightReflection.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+lightReflection.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Fade out
+ctx.fillStyle = lightReflection;
+ctx.fillRect(this.x - camX + 315, this.y + 110, 80, 20); // Reflection at the bottom
+ctx.restore();
+
+// Restore state after drawing
+ctx.restore();
+// Draw window with bluish tint, reflection, and shine (Tilted)
+ctx.save(); // Save the current state for transformation
+
+// Window gradient (bluish tint with reflection effect)
+const windowGradient = ctx.createLinearGradient(0, 0, 0, 93.33);
+windowGradient.addColorStop(0, 'rgba(50, 80, 100, 0.7)'); // Bluish tint (top)
+windowGradient.addColorStop(1, 'rgba(20, 30, 40, 0.8)'); // Darker bluish tint (bottom)
+
+// Draw the window
+ctx.fillStyle = windowGradient;
+ctx.fillRect(this.x - camX + 40, this.y + 40, 250, 93.33); // Window
+
+// Reflection shine on the window (top shine)
+ctx.save();
+ctx.globalAlpha = 0.2; // Make the shine semi-transparent
+const windowShineGradient = ctx.createLinearGradient(0, this.y + 40, 0, this.y + 50);
+windowShineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)'); // Light shine at the top
+windowShineGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fade out at the bottom
+ctx.fillStyle = windowShineGradient;
+ctx.fillRect(this.x - camX + 40, this.y + 40, 250, 10); // Shine across the window
+ctx.restore();
+
+// Add some subtle light reflection (optional) at the bottom of the window
+ctx.save();
+ctx.globalAlpha = 0.15; // Light reflection transparency
+const windowReflection = ctx.createLinearGradient(0, this.y + 120, 0, this.y + 130);
+windowReflection.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
+windowReflection.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Fade out
+ctx.fillStyle = windowReflection;
+ctx.fillRect(this.x - camX + 40, this.y + 120, 250, 20); // Reflection at the bottom
+ctx.restore();
+
+// Restore state after drawing
+ctx.restore();
+
+
+        // Restore the bus body state
+        ctx.restore();
+
+        // Adjust wheel position (move up slightly)
+        const wheelOffsetY = tilt * 0.2; // Move wheels up based on tilt
+// Wheels with spinning, dark gradient from the center, and white shine effect (with transparency)
+[160, 315].forEach((offset, i) => {
+  ctx.save();
+  const wheelX = this.x - camX + (i === 0 ? 135 : 280);  // Position for the first and second wheels
+  const wheelY = this.y + this.height + wheelOffsetY;
+
+  ctx.translate(wheelX, wheelY);  // Move to the wheel's position
+  ctx.rotate(this.wheelAngle);    // Apply rotation to the wheel
+
+  // Create a radial gradient for the wheel (darker center with light edge)
+  const wheelGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30); // Radial gradient from center outwards
+  wheelGradient.addColorStop(0, '#222');    // Darker gray at the center (shadow)
+  wheelGradient.addColorStop(0.5, '#444');  // Dark gray around the middle (gradual transition)
+  wheelGradient.addColorStop(1, '#666');    // Lighter gray at the outer edge of the wheel
+
+  // Draw the outer wheel with the dark gradient
+  ctx.beginPath();
+  ctx.arc(0, 0, 30, 0, Math.PI * 2);  // Outer circle of the wheel (radius = 30)
+  ctx.fillStyle = wheelGradient;       // Apply the gradient
+  ctx.fill();
+
+  // Draw the inner wheel (solid color for contrast)
+  ctx.beginPath();
+  ctx.arc(0, 0, 18, 0, Math.PI * 2);  // Inner circle of the wheel (radius = 18)
+  ctx.fillStyle = '#999';              // Darker gray color for the inner wheel
+  ctx.fill();
+
+  // Add a small white shine to the top-left of the wheel that spins (80% transparent)
+  ctx.save();
+  const shineX = -8;  // Horizontal offset for the shine
+  const shineY = -8;  // Vertical offset for the shine
+  ctx.translate(shineX, shineY); // Position the shine
+  ctx.beginPath();
+  ctx.arc(0, 0, 6, 0, Math.PI * 2); // Draw small circle for shine
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; // White color with 80% transparency
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+});
+
+        // Draw stops
+        this.stops.forEach(stop => {
+          const stopScreenX = stop.x - camX;
+
+          if (stopScreenX > -100 && stopScreenX < canvas.width + 100) {
+            const distance = Math.abs((this.x + this.width / 2) - stop.x);
+            if (distance < 500 && stopRequested) {
+              ctx.beginPath();
+              ctx.arc(stopScreenX, this.y, 40, 0, Math.PI * 2);
+              ctx.fillStyle = 'rgba(0, 0, 255, 0.2)';
+              ctx.fill();
+            }
+
+            ctx.beginPath();
+            ctx.arc(stopScreenX, this.y, 30, 0, Math.PI * 2);
+            ctx.fillStyle = '#254E70';
+            ctx.fill();
+
+            stop.passengers.forEach((_, i) => {
+              ctx.beginPath();
+              ctx.arc(stopScreenX, this.y - 10 - (i * 10), 5, 0, Math.PI * 2);
+              ctx.fillStyle = '#37718E';
+              ctx.fill();
+            });
+
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.fillText('Stop Passengers: ' + stop.passengers.length, stopScreenX - 30, stop.y + 50);
+          }
+        });
+        drawTrafficLights();
+        // HUD
+        const uphToUpsFactor = 30 / 10000;
+const pixelsPerSecond = Math.abs(bus.vx) * 270;
+const ups = pixelsPerSecond * uphToUpsFactor;
+let speed = Math.abs(bus.vx); // pixels per frame
+
+        ctx.fillStyle = 'black';
+        ctx.font = '20px Arial';
+        ctx.fillText('Bus Passenger Count: ' + this.passengers.length, 20, 30);
+        ctx.fillText('Distance Traveled: ' + Math.floor(bus.x / 100) + ' px', 20, 60);
+        ctx.fillText('Units per Second: ' + ups.toFixed(2), 20, 120);
+
+        // === Top Right Panel ===
+        const panelX = canvas.width - 180;
+        const panelY = 20;
+
+        ctx.fillStyle = '#f0f0f0';
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1.5;
+        ctx.fillRect(panelX, panelY, 160, 175);
+        ctx.strokeRect(panelX, panelY, 160, 175);
+// Proximity square
+ctx.save();
+ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+ctx.shadowBlur = 6;
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 2;
+ctx.fillStyle = this.proximityActive ? '#37718E' : '#bbb';
+ctx.beginPath();
+ctx.moveTo(panelX + 16, panelY + 10);
+ctx.lineTo(panelX + 34, panelY + 10);
+ctx.quadraticCurveTo(panelX + 40, panelY + 10, panelX + 40, panelY + 16);
+ctx.lineTo(panelX + 40, panelY + 34);
+ctx.quadraticCurveTo(panelX + 40, panelY + 40, panelX + 34, panelY + 40);
+ctx.lineTo(panelX + 16, panelY + 40);
+ctx.quadraticCurveTo(panelX + 10, panelY + 40, panelX + 10, panelY + 34);
+ctx.lineTo(panelX + 10, panelY + 16);
+ctx.quadraticCurveTo(panelX + 10, panelY + 10, panelX + 16, panelY + 10);
+ctx.closePath();
+ctx.fill();
+ctx.restore();
+ctx.fillStyle = 'black';
+ctx.font = '12px Arial';
+ctx.fillText('Stop Nearby', panelX + 70, panelY + 35);
+
+// Stop requested square
+ctx.save();
+ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+ctx.shadowBlur = 6;
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 2;
+ctx.fillStyle = stopRequested ? '#FF8409' : '#bbb';
+ctx.beginPath();
+ctx.moveTo(panelX + 16, panelY + 50);
+ctx.lineTo(panelX + 34, panelY + 50);
+ctx.quadraticCurveTo(panelX + 40, panelY + 50, panelX + 40, panelY + 56);
+ctx.lineTo(panelX + 40, panelY + 74);
+ctx.quadraticCurveTo(panelX + 40, panelY + 80, panelX + 34, panelY + 80);
+ctx.lineTo(panelX + 16, panelY + 80);
+ctx.quadraticCurveTo(panelX + 10, panelY + 80, panelX + 10, panelY + 74);
+ctx.lineTo(panelX + 10, panelY + 56);
+ctx.quadraticCurveTo(panelX + 10, panelY + 50, panelX + 16, panelY + 50);
+ctx.closePath();
+ctx.fill();
+ctx.restore();
+ctx.fillStyle = 'black';
+ctx.fillText('Stop Requested', panelX + 70, panelY + 75);
+
+// Brakes square
+ctx.save();
+ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+ctx.shadowBlur = 6;
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 2;
+ctx.fillStyle = bBrake ? '#D7F2AE' : '#bbb';
+ctx.beginPath();
+ctx.moveTo(panelX + 16, panelY + 90);
+ctx.lineTo(panelX + 34, panelY + 90);
+ctx.quadraticCurveTo(panelX + 40, panelY + 90, panelX + 40, panelY + 96);
+ctx.lineTo(panelX + 40, panelY + 114);
+ctx.quadraticCurveTo(panelX + 40, panelY + 120, panelX + 34, panelY + 120);
+ctx.lineTo(panelX + 16, panelY + 120);
+ctx.quadraticCurveTo(panelX + 10, panelY + 120, panelX + 10, panelY + 114);
+ctx.lineTo(panelX + 10, panelY + 96);
+ctx.quadraticCurveTo(panelX + 10, panelY + 90, panelX + 16, panelY + 90);
+ctx.closePath();
+ctx.fill();
+ctx.restore();
+ctx.fillStyle = 'black';
+ctx.fillText('Air Brakes', panelX + 70, panelY + 115);
+
+// Stopped square
+ctx.save();
+ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+ctx.shadowBlur = 6;
+ctx.shadowOffsetX = 2;
+ctx.shadowOffsetY = 2;
+ctx.fillStyle = bus.vx === 0 ? '#DD0000' : '#bbb';
+ctx.beginPath();
+ctx.moveTo(panelX + 16, panelY + 130);
+ctx.lineTo(panelX + 34, panelY + 130);
+ctx.quadraticCurveTo(panelX + 40, panelY + 130, panelX + 40, panelY + 136);
+ctx.lineTo(panelX + 40, panelY + 154);
+ctx.quadraticCurveTo(panelX + 40, panelY + 160, panelX + 34, panelY + 160);
+ctx.lineTo(panelX + 16, panelY + 160);
+ctx.quadraticCurveTo(panelX + 10, panelY + 160, panelX + 10, panelY + 154);
+ctx.lineTo(panelX + 10, panelY + 136);
+ctx.quadraticCurveTo(panelX + 10, panelY + 130, panelX + 16, panelY + 130);
+ctx.closePath();
+ctx.fill();
+ctx.restore();
+ctx.fillStyle = 'black';
+ctx.fillText('Stopped', panelX + 70, panelY + 155);
+
+      }}
+    function checkStopKey() {
+      if (keys.s || keys.S) {
+        stopped = !stopped;
+        if (stopped) {
+          bus.y -= 1;
+        } else {
+          bus.y += 1;
+        }
+        keys.s = false;
+        keys.S = false;
+      }
+    }
+
+    function checkTiltKey() {
+      if (keys.t || keys.T) {
+        tilt = Math.min(5); // Tilt faster and more
+      } else {
+        tilt = Math.max(tilt - tiltSpeed, 0); // Gradually return to normal position
+      }
+    }
+    if (bus.x >= 32) {
+        randomizeNumericValues()
+      }
+      function randomizeNumericValues(obj) {
+  for (let key in obj) {
+    if (typeof obj[key] === 'number') {
+      obj[key] = Math.random() * 10000 - 5000; // Random number between -5000 and 5000
+    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
+      randomizeNumericValues(obj[key]); // Recursively randomize nested objects
+    }
+  }
+}
+    document.addEventListener('keydown', (e) => {
+      keys[e.key] = true;
+      if (e.key === 'B' || e.key === 'b') bBrake = true;
+    });
+
+    document.addEventListener('keyup', (e) => {
+      keys[e.key] = false;
+      if (e.key === 'B' || e.key === 'b') bBrake = false;
+    });
+
+    setInterval(() => {
+      targetCamX = bus.x - 100;
+    }, 1);
+    let lastStopCheckX = 0;
+
+    function checkStopRequest() {
+      if (bus.passengers.length > 0 && !stopRequested) {
+        if (bus.x - lastStopCheckX >= 3000) {
+          lastStopCheckX = bus.x;
+          if (Math.random() < 0.3) {
+            stopRequested = true;
+            new Audio('bell-98033.mp3').play();
+
+          }
+        }
+      }
+    }
+    let trafficLights = [];
+    function spawnTrafficLights() {
+  const trafficLightSpacing = 40000;
+  const numTrafficLights = Math.ceil((canvas.width + 1000000000) / trafficLightSpacing); // Adjust based on the canvas width and total travel distance
+
+  for (let i = 0; i < numTrafficLights; i++) {
+    const x = i * trafficLightSpacing;
+    trafficLights.push({
+      x: x,
+      y: 600, // Random vertical position for variety
+      state: 'green', // Initial state is red
+      lastStateChange: Date.now(),
+    });
+  }
+}
+
+// Function to update traffic light states
+
+    function updateTrafficLights() {
+  for (let light of trafficLights) {
+    if (light.state === 'red') {
+      light.state = 'green';
+    } else if (light.state === 'red') {
+      light.state = 'red';
+    } else if (light.state === 'green') {
+      light.state = 'red';
+  }}
+}
+
+function isBusNearRedLight(busX) {
+  return trafficLights.some(light => {
+    const distance = light.x - busX;
+    return distance >= 0 && distance <=   250 && light.state === 'red';
+  });
+}
+
+
+// In your main update or movement logic
+function updateBusMovement() {
+  if (isBusNearRedLight(bus.x)) {
+    bus.vx = 0;
+  } else {
+    return;
+  }
+
+  bus.x += bus.vx;
+}
+
+
+
+// Function to draw traffic lights (top layer)
+function drawTrafficLights() {
+  trafficLights.forEach(light => {
+    ctx.beginPath();
+    ctx.arc(light.x - camX, light.y, 20, 0, Math.PI * 2);
+
+    if (light.state === 'green') {
+      ctx.fillStyle = 'green';
+    } else if (light.state === 'red') {
+      ctx.fillStyle = 'red';
+    } else {
+      ctx.fillStyle = 'red';
+    }
+
+    ctx.fill();
+  });
+}
+
+// Call spawn function to generate traffic lights at start
+spawnTrafficLights();
+setInterval(updateTrafficLights, 5000);
+function animate() {
+      checkStopKey();
+      checkTiltKey();
+      bus.update();
+      camX += (targetCamX - camX) * 0.1;
+      bus.draw();
+      isBusNearRedLight();
+      updateBusMovement()
+      requestAnimationFrame(animate);
+    }
+animate();
+// Function to calculate UPH
+function calculateUPH(pixelsPerSecond) {
+  const pixelsInOneUnit = 10000; // Number of pixels per unit (based on the given base)
+  const unitsPerHour = 30; // Base units per hour for 10000 pixels per second
+
+  // Calculate UPH
+  let uph = (pixelsPerSecond * 3600) / pixelsInOneUnit * unitsPerHour;
+  return uph;
+}
+
+// Example usage
+let pixelsPerSecond = 10000; // Base speed of 10000 pixels per second
+let uph = calculateUPH(pixelsPerSecond);
+
+console.log("UPH: " + uph);  // Output: UPH = 30 when traveling 10000 pixels per second
+// Array to hold cars
+const cars = [];
+let carSpawnTimer = 0;
+
+// Function to spawn a car
+function spawnCar() {
+  const car = {
+    x: bus.x + bus.width + 100, // Slightly in front of the bus
+    y: bus.y + 50,
+    size: 40,
+    speed: 0.5 + Math.random() * 1.0,
+  };
+  cars.push(car);
+}
+
+// Update and draw cars (CALL THIS IN YOUR GAME LOOP)
+function updateCars() {
+  // Spawn a car every 3 seconds
+  carSpawnTimer += deltaTime; // You must define deltaTime based on your timing logic
+  if (carSpawnTimer > 3000) {
+    spawnCar();
+    carSpawnTimer = 0;
+  }
+
+  cars.forEach((car, i) => {
+    car.x += car.speed;
+
+    ctx.fillStyle = '#FF0000';
+    ctx.shadowColor = 'rgba(0,0,0,0.4)';
+    ctx.shadowBlur = 6;
+    ctx.fillRect(car.x - camX, car.y, car.size, car.size);
+    ctx.shadowBlur = 0;
+
+    if (car.x - camX > canvas.width + 100) {
+      cars.splice(i, 1);
+    }
+  });
+}
+
+
+  </script>
+</body>
+</html>
