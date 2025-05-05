@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Stopped Go</title>
+  <title>Canvas Bus Simulation</title>
   <style>
     canvas {
       background: #e0f7fa;
@@ -12,6 +12,7 @@
       width: 750px;
       height: 450px;
     }
+
     .buttons-container {
       position: fixed;
       top: 50%;
@@ -25,8 +26,8 @@
 
     /* Button styles */
     .button {
-      user-select: none; /* Prevent text selection */
-      -webkit-user-select: none; /* For Safari */
+        user-select: none; /* Prevent text selection */
+        -webkit-user-select: none; /* For Safari */
       -moz-user-select: none; /* For Firefox */
       background-color: #444;
       color: white;
@@ -111,6 +112,10 @@ let reversePressed = false;
     const tiltMax = 15; // Maximum tilt angle in degrees
     let speedLocked = false;
     const LIMIT = 32767;
+    let fuel = 100;
+    let distanceSinceLastFuelUse = 0;
+    let previousX = this.x; // Ensure bus.x has a proper initial value
+
 
 
 
@@ -148,6 +153,11 @@ if (bBrake) {
     }
   }
 }
+let dx = this.x - previousX;
+distanceSinceLastFuelUse = bus.x
+previousX = this.x;
+
+
 const forwardBtn = document.getElementById('forwardBtn');
 const reverseBtn = document.getElementById('reverseBtn');
 
@@ -214,15 +224,19 @@ document.addEventListener('keyup', (e) => {
           }
 
           if (Math.abs(dx) < 500 && bus.vx === 0) {
-            if (stop.passengers.length > 0) {
+            if (stop.passengers.length > 0 && this.passengers.length <= 5) {
               // Add passengers to the bus (once)
               this.passengers.push(...stop.passengers);
               stop.passengers = [];  // Clear the stop's passengers after they've boarded
             }
-
-            if (stopRequested && Math.abs(dx) < 500 && this.passengers.length > 0 && bus.vx === 0) {
+if (stopRequested && Math.abs(dx) < 500 && this.passengers.length > 0 && bus.vx === 0) {
               // Remove one passenger from the bus when stop requested
               this.passengers.pop();  // Removes the last passenger added to the bus
+              stopRequested = false;
+            }
+            if (stopRequested && Math.abs(dx) < 1000 && this.passengers.length > 5 && bus.vx === 0 && this.passengers.length) {
+              // Remove one passenger from the bus when stop requested
+              this.passengers.length -= 3
               stopRequested = false;
             }
           }
@@ -352,7 +366,12 @@ ctx.restore();
 // Restore state after drawing
 ctx.restore();
 
-
+fuelPickups.forEach(pickup => {
+  if (!pickup.collected) {
+    ctx.fillStyle = 'orange';
+    ctx.fillRect(pickup.x - bus.x + canvas.width / 2 - 10, 400, 20, 20);
+  }
+});
         // Restore the bus body state
         ctx.restore();
 
@@ -427,6 +446,7 @@ ctx.restore();
             ctx.fillStyle = 'black';
             ctx.font = '16px Arial';
             ctx.fillText('Stop Passengers: ' + stop.passengers.length, stopScreenX - 30, stop.y + 50);
+            
           }
         });
         drawTrafficLights();
@@ -438,9 +458,21 @@ let speed = Math.abs(bus.vx); // pixels per frame
 
         ctx.fillStyle = 'black';
         ctx.font = '20px Arial';
-        ctx.fillText('Bus Passenger Count: ' + this.passengers.length, 20, 30);
-        ctx.fillText('Distance Traveled: ' + Math.floor(bus.x / 100) + ' px', 20, 60);
-        ctx.fillText('Units per Second: ' + ups.toFixed(2), 20, 120);
+        ctx.fillText('Passanger Count: ' + this.passengers.length, 20, 30);
+        ctx.fillText('Distance Traveled: ' + Math.floor(bus.x / 100) + ' Units', 20, 60);
+        let lastFuelCheck = 0;
+
+        setInterval(() => {
+  if (bus.vx > 0) {
+    fuel = Math.max(fuel - 0.001 * (bus.vx / 10) , 0); // Ensure fuel doesn't go below 0
+  }
+}, 2000); // 2000 milliseconds = 2 seconds
+
+
+
+        ctx.fillText(ups.toFixed(10) + ' UPS', 20, 90);
+        ctx.fillText('Fuel: ' + fuel.toFixed(2), 20, 120);
+
 
         // === Top Right Panel ===
         const panelX = canvas.width - 180;
@@ -606,7 +638,7 @@ ctx.fillText('Stopped', panelX + 70, panelY + 155);
     }
     let trafficLights = [];
     function spawnTrafficLights() {
-  const trafficLightSpacing = 40000;
+  const trafficLightSpacing = 124230;
   const numTrafficLights = Math.ceil((canvas.width + 1000000000) / trafficLightSpacing); // Adjust based on the canvas width and total travel distance
 
   for (let i = 0; i < numTrafficLights; i++) {
@@ -619,6 +651,28 @@ ctx.fillText('Stopped', panelX + 70, panelY + 155);
     });
   }
 }
+let fuelPickups = [];
+
+
+function spawnFuelPickups() {
+  const fuelSpacing = 7500;
+  const numFuelPickups = Math.ceil((canvas.width + 1000000000) / fuelSpacing);
+
+  for (let i = 0; i < numFuelPickups; i++) {
+    const x = i * fuelSpacing;
+    fuelPickups.push({
+      x: x,
+      y: 600, // Position on the road, same as traffic lights
+      collected: false,
+    });
+  }
+}
+
+  if (Math.abs(bus.x - fuelPickups.x) < 500) {
+    fuel = 100
+    collected = true
+  }
+spawnFuelPickups();
 
 // Function to update traffic light states
 
@@ -684,6 +738,7 @@ function animate() {
       isBusNearRedLight();
       updateBusMovement()
       requestAnimationFrame(animate);
+
     }
 animate();
 // Function to calculate UPH
@@ -699,48 +754,8 @@ function calculateUPH(pixelsPerSecond) {
 // Example usage
 let pixelsPerSecond = 10000; // Base speed of 10000 pixels per second
 let uph = calculateUPH(pixelsPerSecond);
-
 console.log("UPH: " + uph);  // Output: UPH = 30 when traveling 10000 pixels per second
-// Array to hold cars
-const cars = [];
-let carSpawnTimer = 0;
-
-// Function to spawn a car
-function spawnCar() {
-  const car = {
-    x: bus.x + bus.width + 100, // Slightly in front of the bus
-    y: bus.y + 50,
-    size: 40,
-    speed: 0.5 + Math.random() * 1.0,
-  };
-  cars.push(car);
-}
-
-// Update and draw cars (CALL THIS IN YOUR GAME LOOP)
-function updateCars() {
-  // Spawn a car every 3 seconds
-  carSpawnTimer += deltaTime; // You must define deltaTime based on your timing logic
-  if (carSpawnTimer > 3000) {
-    spawnCar();
-    carSpawnTimer = 0;
-  }
-
-  cars.forEach((car, i) => {
-    car.x += car.speed;
-
-    ctx.fillStyle = '#FF0000';
-    ctx.shadowColor = 'rgba(0,0,0,0.4)';
-    ctx.shadowBlur = 6;
-    ctx.fillRect(car.x - camX, car.y, car.size, car.size);
-    ctx.shadowBlur = 0;
-
-    if (car.x - camX > canvas.width + 100) {
-      cars.splice(i, 1);
-    }
-  });
-}
-
-
   </script>
 </body>
 </html>
+
