@@ -2,760 +2,2467 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Canvas Bus Simulation</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bus Visual Canvas - Multiple Buses</title>
   <style>
-    canvas {
-      background: #e0f7fa;
-      display: block;
-      margin: 0 auto;
-      width: 750px;
-      height: 450px;
-    }
-
-    .buttons-container {
-      position: fixed;
-      top: 50%;
-      left: 10px;
-      transform: translateY(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      z-index: 10; /* Keep buttons on top of the canvas */
-    }
-
-    /* Button styles */
-    .button {
-        user-select: none; /* Prevent text selection */
-        -webkit-user-select: none; /* For Safari */
-      -moz-user-select: none; /* For Firefox */
-      background-color: #444;
-      color: white;
-      font-size: 24px;
-      width: 60px;
-      height: 40px;
+    body {
+      margin: 0;
+      height: 100vh;
+      background: linear-gradient(to bottom right, #dce1e9, #f2f4f7);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       display: flex;
       justify-content: center;
       align-items: center;
-      margin: 10px 0;
-      text-align: center;
-      border: none;
-      cursor: pointer;
-      border-radius: 5px;
+      overflow: hidden;
     }
 
-    .button:active {
-      background-color: #555; /* Change color on button press */
+    #app {
+      transform: scale(0.67);
+      transform-origin: center center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
     }
+
+    canvas {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 20px;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+      border: none;
+    }
+
+    #controls {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    #controls button,
+    #info,
+    #vxDisplay,
+    #passengerCount,
+    #speedDistance,
+    #stopNotice,
+    #pointsDisplay,
+    #stopHistoryDisplay {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      border-radius: 16px;
+      backdrop-filter: blur(18px);
+      background: rgba(255, 255, 255, 0.2);
+      color: #222;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+      padding: 10px 14px;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      user-select: none;
+    }
+
+    #speedDistance,
+    #pointsDisplay,
+    #stopNotice {
+      background: rgba(255, 255, 255, 0.25);
+      color: #000;
+      font-weight: 600;
+    }
+
+    #info {
+      font-size: 14px;
+      color: #333;
+      background: rgba(255,255,255,0.2);
+    }
+
+    button {
+      cursor: pointer;
+      transition: all 0.25s ease;
+      border: none;
+    }
+
+    button:hover {
+      background: rgba(255, 255, 255, 0.35);
+      transform: scale(1.05);
+    }
+
+    #controls button {
+      font-size: 15px;
+      font-weight: 600;
+      padding: 10px 16px;
+      color: #111;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(15px);
+      border-radius: 12px;
+      cursor: pointer;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+      text-align: center;
+      min-width: 180px;
+    }
+
+    #controls button:active {
+      transform: scale(0.97);
+      background: rgba(255, 255, 255, 0.3);
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.1) inset;
+    }
+
+    #stopHistoryDisplay {
+      max-height: 300px;
+      overflow-y: auto;
+      background: rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      padding: 16px;
+      border-radius: 16px;
+      font-family: 'Segoe UI', sans-serif;
+      color: #111;
+      font-size: 14px;
+      line-height: 1.0;
+      box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      margin-top: 20px;
+    }
+
+    #minimap {
+      backdrop-filter: blur(12px);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+    }
+
+    #gradientPopup {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.4);
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+    }
+
+    #gradientPopup.show {
+      display: flex;
+    }
+
+    #gradientContent {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 20px;
+      padding: 30px 40px;
+      color: white;
+      text-align: center;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    }
+
+    #gradientContent h3 {
+      margin-top: 0;
+      margin-bottom: 20px;
+      font-size: 20px;
+      color: #fff;
+    }
+
+    #gradientContent button {
+      margin-top: 10px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      border: none;
+      background: rgba(255,255,255,0.25);
+      cursor: pointer;
+      font-weight: bold;
+      color: white;
+      transition: 0.25s;
+    }
+
+    #gradientContent button:hover {
+      background: rgba(255,255,255,0.4);
+      transform: scale(1.05);
+    }
+#controls {
+  position: fixed;       /* fix position on screen */
+  top: 60px;             /* some space from top */
+  left: -400px;            /* some space from left */
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  width: 350px;          /* fixed width */
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.1);
+  z-index: 10000;        /* above other content */
+  max-height: 150vh;  /* so it doesn’t overflow vertically */
+  overflow-y: auto;      /* scroll if content is too tall */
+}
+
+
+#controls > div,
+#controls > pre {
+  width: 150px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 5px rgba(255,255,255,0.3);
+  color: #222;
+  font-weight: 600;
+  font-size: 15px;
+  user-select: none;
+  line-height: 1.3;
+}
+
+#pointsDisplay,
+#speedDistance {
+  background: rgba(255, 255, 255, 0.25);
+  color: #111;
+  font-weight: 700;
+  font-size: 17px;
+  line-height: 1.4;
+}
+
+#info {
+  background: rgba(255, 255, 255, 0.15);
+  font-weight: 500;
+  font-size: 14px;
+  color: #333;
+  user-select: text;
+}
+
+#vxDisplay {
+  display: none; /* keep hidden unless needed */
+}
+
+button {
+  width: 100px;
+  padding: 12px 0;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 16px;
+  background: rgba(255, 255, 255, 0.3);
+  color: #222;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 5px 12px rgba(0, 0, 0, 0.1);
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.45);
+  transform: scale(1.04);
+}
+
+button:active {
+  transform: scale(0.97);
+  background: rgba(255, 255, 255, 0.35);
+}
+
+#stopHistoryDisplay {
+  position: fixed;       /* fix position on screen */
+  top: 60px;             /* some space from top */
+  right: -400px;            /* some space from left */
+  max-height: 220px;
+  overflow-y: auto;
+  font-family: 'Segoe UI', sans-serif;
+  font-size: 14px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #222;
+  padding: 14px;
+  border-radius: 14px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.1);
+  white-space: pre-wrap;
+  line-height: 1.25;
+}
+#quickKeyboard {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 9999;
+  padding: 14px 20px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(15px);
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+#quickKeyboard button {
+  font-size: 15px;
+  font-weight: 600;
+  padding: 10px 16px;
+  color: #111;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(15px);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+  text-align: center;
+  min-width: 60px;
+}
+
   </style>
 </head>
 <body>
-  <canvas id="busCanvas" width="1000" height="600"></canvas>
-  <div class="buttons-container">
-    <button class="button" id="forwardBtn">∧</button>
-    <button class="button" id="reverseBtn">∨</button>
-    <button class="button" id="brakeBtn">|||</button>
-    <button class="button" id="stopBtn">[][]</button>
+  <div id="app">
+    <div id="controls">
+      <div id="pointsDisplay">Points: 0</div>
+      <div id="speedDistance">Distance: 0 px<br>Speed: 0 px/s</div>
+      <div id="vxDisplay" style="display: none">vx: 0</div>
+
+      <button id="openGradientMenu">Customize Menu</button>
+      <button onclick="showStopHistory()">View Stop History</button>
+
+      <div style="display: none"id="info">Press 1, 2, or 3 to switch buses. Current: Gillig 29'</div>
+      <canvas id="minimap" width="300" height="100"></canvas>
     </div>
+
+    <div id="gradientPopup">
+      <div id="gradientContent">
+        <h3>Gradient Settings</h3>
+        <label>
+          Start Color:
+          <input type="color" id="startColorPicker" value="#d3d3d3" />
+        </label>
+        <br /><br />
+        <label>
+          End Color:
+          <input type="color" id="endColorPicker" value="#d3d3d3" />
+        </label>
+        <br /><br />
+        <button onclick="exportGradient()">Export Gradient</button>
+        <input type="file" id="importGradientFile" style="display:none" accept=".sg,.json" />
+        <button onclick="document.getElementById('importGradientFile').click()">Import Gradient</button>
+        <br /><br />
+        <button id="closeGradientMenu">Close</button>
+      </div>
+    </div>
+
+    <canvas id="busCanvas" width="800" height="600"></canvas>
+          <pre id="stopHistoryDisplay"></pre>
+          <div id="quickKeyboard">
+  <button data-key="1">1</button>
+  <button data-key="2">2</button>
+  <button data-key="3">3</button>
+  <button data-key="ArrowRight">→</button>
+  <button data-key="b">B</button>
+  <button data-key="l">L</button>
+</div>
+
+  </div>
+
   <script>
-
-    // Event listeners for button clicks
-    document.getElementById('forwardBtn').addEventListener('click', () => {
-      const forwardBtn = document.getElementById('forwardBtn');
-
-    })
-
-    document.getElementById('reverseBtn').addEventListener('click', () => {
-const reverseBtn = document.getElementById('reverseBtn');
-
-
-    });
-
-    document.getElementById('brakeBtn').addEventListener('click', () => {
-      const brakeBtn = document.getElementById('brakeBtn');
-
-// Brake activation on press
-brakeBtn.addEventListener('mousedown', () => { bBrake = true; });
-brakeBtn.addEventListener('touchstart', () => { bBrake = true; }, { passive: true });
-    
-
-// Brake deactivation on release
-brakeBtn.addEventListener('mouseup', () => { bBrake = false; });
-brakeBtn.addEventListener('touchend', () => { bBrake = false; }, { passive: true });
-    })
-    document.getElementById('stopBtn').addEventListener('click', () => {
-      stopped = !stopped;
-        if (stopped) {
-          bus.y -= 1;
-        } else {
-          bus.y += 1;
-        }
-    })
-// Handle touchstart event for brak
-
-    const canvas = document.getElementById('busCanvas');
-    const ctx = canvas.getContext('2d');
-    
-let forwardPressed = false;
-let reversePressed = false;
-
-    let keys = {};
-    let stopped = false;
-    let bBrake = false;
-    let stopRequested = false;
-
-    let camX = 0;
-    let targetCamX = 0;
-
-    let tilt = 0; // Angle for bus body tilt in degrees
-    let tiltSpeed = 3; // Tilt speed (faster)
-    const tiltMax = 15; // Maximum tilt angle in degrees
-    let speedLocked = false;
-    const LIMIT = 32767;
-    let fuel = 100;
-    let distanceSinceLastFuelUse = 0;
-    let previousX = this.x; // Ensure bus.x has a proper initial value
-
-
-
-
-    const bus = {
-
-      x: 100,
-      y: 350,
-      width: 400,
-      height: 200,
-      vx: 0,
-      ax: 0.1,
-      friction: 0.0005,
-      wheelAngle: 0,
-      wheelY: 0, // For wheel vertical position change
-      passengers: [],
-      stops: [],
-      proximityActive: false,
-      update() {
-
-
-if (bBrake) {
-  bus.vx *= 0.99;
-  if (Math.abs(bus.vx) < 0.2) bus.vx = 0;
-  speedLocked = false
-} else {
-  if (!speedLocked) {
-    if (!keys.ArrowLeft && !keys.ArrowRight || stopped) {
-      bus.vx *= (1 - bus.friction);
-      if (Math.abs(bus.vx) < 0.01) bus.vx = 0;
-    }
-
-    if (!stopped) {
-      if (keys.ArrowLeft) bus.vx -= bus.ax;
-      if (keys.ArrowRight) bus.vx += bus.ax;
-    }
-  }
-}
-let dx = this.x - previousX;
-distanceSinceLastFuelUse = bus.x
-previousX = this.x;
-
-
-const forwardBtn = document.getElementById('forwardBtn');
-const reverseBtn = document.getElementById('reverseBtn');
-
-forwardBtn.addEventListener('mousedown', () => { forwardPressed = true; });
-forwardBtn.addEventListener('mouseup', () => { forwardPressed = false; });
-forwardBtn.addEventListener('touchstart', () => { forwardPressed = true; }, { passive: true });
-forwardBtn.addEventListener('touchend', () => { forwardPressed = false; }, { passive: true });
-
-reverseBtn.addEventListener('touchstart', () => { reversePressed = true; }, { passive: true });
-reverseBtn.addEventListener('touchend', () => { reversePressed = false; }, { passive: true });
-reverseBtn.addEventListener('mousedown', () => { reversePressed = true; });
-reverseBtn.addEventListener('mouseup', () => { reversePressed = false; });
-
-if (bBrake) {
-  bus.vx *= 0.99;
-  if (Math.abs(bus.vx) < 0.2) bus.vx = 0;
-  speedLocked = false;
-} else {
-  if (!speedLocked) {
-    const noInput = (
-      (!keys.ArrowLeft && !keys.ArrowRight && !forwardPressed && !reversePressed)
-      || stopped
-    );
-
-    if (!stopped) {
-      if (keys.ArrowLeft || reversePressed) bus.vx -= bus.ax;
-      if (keys.ArrowRight || forwardPressed) bus.vx += bus.ax;
-    }
-  }
-}
-
-document.addEventListener('keydown', (e) => {
-  keys[e.key.toLowerCase()] = true;
-
-  if (e.key.toLowerCase() === 'f') {
-    speedLocked = !speedLocked;
-  }
-});
-
-document.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
-
-        this.x += this.vx;
-        this.wheelAngle += this.vx / 10;
-        checkStopRequest();
-
-        const neededStops = Math.ceil((this.x + 50000) / 3000);
-        while (this.stops.length < neededStops) {
-          const newStopX = this.stops.length * 20000;
-          this.stops.push({
-            x: newStopX,
-            y: this.y + this.height + 100,
-            passengers: Array(Math.floor(Math.random() * 4) + 1).fill({})
-          });
-        }
-
-        this.proximityActive = false;
-
-        this.stops = this.stops.filter(stop => {
-          const dx = (this.x + this.width / 2) - stop.x;
-          if (Math.abs(dx) < 2500) {
-            this.proximityActive = true;
-          }
-
-          if (Math.abs(dx) < 500 && bus.vx === 0) {
-            if (stop.passengers.length > 0 && this.passengers.length <= 5) {
-              // Add passengers to the bus (once)
-              this.passengers.push(...stop.passengers);
-              stop.passengers = [];  // Clear the stop's passengers after they've boarded
-            }
-if (stopRequested && Math.abs(dx) < 500 && this.passengers.length > 0 && bus.vx === 0) {
-              // Remove one passenger from the bus when stop requested
-              this.passengers.pop();  // Removes the last passenger added to the bus
-              stopRequested = false;
-            }
-            if (stopRequested && Math.abs(dx) < 1000 && this.passengers.length > 5 && bus.vx === 0 && this.passengers.length) {
-              // Remove one passenger from the bus when stop requested
-              this.passengers.length -= 3
-              stopRequested = false;
-            }
-          }
-
-          return stop.passengers.length > 0;
-        });
-      },
-      draw() {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-// Road with gradient
-const roadGradient = ctx.createLinearGradient(0, this.y + this.height + 30, 0, this.y + this.height + 130);
-
-// Define gradient stops
-roadGradient.addColorStop(0, '#aaa'); // Lighter color at the beginning
-roadGradient.addColorStop(0.5, '#888'); // Mid-tone color in the middle
-roadGradient.addColorStop(1, '#666'); // Darker color at the end
-
-// Apply gradient to road
-ctx.fillStyle = roadGradient;
-ctx.fillRect(0, this.y + this.height + 30, canvas.width, 100);
-
-// Bus body (Tilted)
-ctx.save(); // Save the current state
-ctx.translate(this.x - camX + this.width / 2, this.y + this.height / 2); // Move to center of bus body
-ctx.rotate(tilt * Math.PI / 180); // Apply tilt in degrees
-ctx.translate(-(this.x - camX + this.width / 2), -(this.y + this.height / 2)); // Restore position
-
-// Create a linear gradient for the bus body
-const busGradient = ctx.createLinearGradient(this.x - camX, this.y + this.height, this.x - camX + this.width, this.y);
-busGradient.addColorStop(0, 'rgba(100, 100, 100, 0.4)');  // Dark gray starting from bottom-left
-busGradient.addColorStop(1, 'rgba(211, 211, 211, 1)'); // Lighter gray at top-right
-
-// Apply the gradient to the bus body
-ctx.beginPath();
-ctx.moveTo(this.x - camX, this.y);
-ctx.lineTo(this.x - camX, this.y + this.height);
-ctx.lineTo(this.x - camX + this.width, this.y + this.height);
-ctx.bezierCurveTo(
-  this.x - camX + this.width + 63,
-  this.y + this.height - 15,
-  this.x - camX + this.width + 63,
-  this.y + 10,
-  this.x - camX + this.width,
-  this.y
-);
-ctx.lineTo(this.x - camX, this.y);
-ctx.closePath();
-ctx.fillStyle = busGradient;
-ctx.fill();
-
-// Restore the state after applying the bus body gradient
-ctx.restore();
-
-        // Draw door and windows (Tilted)
-        ctx.fillStyle = 'black';
-// Draw double door with bluish tint, reflection, and shine (Tilted)
-ctx.save(); // Save the current state for transformation
-
-// Door gradient (bluish tint with reflection effect)
-const doorGradient = ctx.createLinearGradient(0, 0, 0, 130);
-doorGradient.addColorStop(0, 'rgba(50, 80, 100, 0.7)'); // Bluish tint (top)
-doorGradient.addColorStop(1, 'rgba(20, 30, 40, 0.8)'); // Darker bluish tint (bottom)
-
-// Draw left side of the double door (left half)
-ctx.fillStyle = doorGradient;
-ctx.fillRect(this.x - camX + 315, this.y + 40, 40, 130);  // Left half of the door
-
-// Draw right side of the double door (right half)
-ctx.fillStyle = doorGradient;
-ctx.fillRect(this.x - camX + 355, this.y + 40, 40, 130);  // Right half of the door
-
-// Reflection shine on the door (top shine)
-ctx.save();
-ctx.globalAlpha = 0.2; // Make the shine semi-transparent
-const shineGradient = ctx.createLinearGradient(0, this.y + 40, 0, this.y + 50);
-shineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)'); // Light shine at the top
-shineGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fade out at the bottom
-ctx.fillStyle = shineGradient;
-ctx.fillRect(this.x - camX + 315, this.y + 40, 80, 10); // Shine across both doors
-ctx.restore();
-
-// Add some subtle light reflection (optional) at the bottom of the door
-ctx.save();
-ctx.globalAlpha = 0.15; // Light reflection transparency
-const lightReflection = ctx.createLinearGradient(0, this.y + 110, 0, this.y + 130);
-lightReflection.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
-lightReflection.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Fade out
-ctx.fillStyle = lightReflection;
-ctx.fillRect(this.x - camX + 315, this.y + 110, 80, 20); // Reflection at the bottom
-ctx.restore();
-
-// Restore state after drawing
-ctx.restore();
-// Draw window with bluish tint, reflection, and shine (Tilted)
-ctx.save(); // Save the current state for transformation
-
-// Window gradient (bluish tint with reflection effect)
-const windowGradient = ctx.createLinearGradient(0, 0, 0, 93.33);
-windowGradient.addColorStop(0, 'rgba(50, 80, 100, 0.7)'); // Bluish tint (top)
-windowGradient.addColorStop(1, 'rgba(20, 30, 40, 0.8)'); // Darker bluish tint (bottom)
-
-// Draw the window
-ctx.fillStyle = windowGradient;
-ctx.fillRect(this.x - camX + 40, this.y + 40, 250, 93.33); // Window
-
-// Reflection shine on the window (top shine)
-ctx.save();
-ctx.globalAlpha = 0.2; // Make the shine semi-transparent
-const windowShineGradient = ctx.createLinearGradient(0, this.y + 40, 0, this.y + 50);
-windowShineGradient.addColorStop(0, 'rgba(255, 255, 255, 0.3)'); // Light shine at the top
-windowShineGradient.addColorStop(1, 'rgba(255, 255, 255, 0)');   // Fade out at the bottom
-ctx.fillStyle = windowShineGradient;
-ctx.fillRect(this.x - camX + 40, this.y + 40, 250, 10); // Shine across the window
-ctx.restore();
-
-// Add some subtle light reflection (optional) at the bottom of the window
-ctx.save();
-ctx.globalAlpha = 0.15; // Light reflection transparency
-const windowReflection = ctx.createLinearGradient(0, this.y + 120, 0, this.y + 130);
-windowReflection.addColorStop(0, 'rgba(255, 255, 255, 0.2)');
-windowReflection.addColorStop(1, 'rgba(255, 255, 255, 0)'); // Fade out
-ctx.fillStyle = windowReflection;
-ctx.fillRect(this.x - camX + 40, this.y + 120, 250, 20); // Reflection at the bottom
-ctx.restore();
-
-// Restore state after drawing
-ctx.restore();
-
-fuelPickups.forEach(pickup => {
-  if (!pickup.collected) {
-    ctx.fillStyle = 'orange';
-    ctx.fillRect(pickup.x - bus.x + canvas.width / 2 - 10, 400, 20, 20);
-  }
-});
-        // Restore the bus body state
-        ctx.restore();
-
-        // Adjust wheel position (move up slightly)
-        const wheelOffsetY = tilt * 0.2; // Move wheels up based on tilt
-// Wheels with spinning, dark gradient from the center, and white shine effect (with transparency)
-[160, 315].forEach((offset, i) => {
-  ctx.save();
-  const wheelX = this.x - camX + (i === 0 ? 135 : 280);  // Position for the first and second wheels
-  const wheelY = this.y + this.height + wheelOffsetY;
-
-  ctx.translate(wheelX, wheelY);  // Move to the wheel's position
-  ctx.rotate(this.wheelAngle);    // Apply rotation to the wheel
-
-  // Create a radial gradient for the wheel (darker center with light edge)
-  const wheelGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30); // Radial gradient from center outwards
-  wheelGradient.addColorStop(0, '#222');    // Darker gray at the center (shadow)
-  wheelGradient.addColorStop(0.5, '#444');  // Dark gray around the middle (gradual transition)
-  wheelGradient.addColorStop(1, '#666');    // Lighter gray at the outer edge of the wheel
-
-  // Draw the outer wheel with the dark gradient
-  ctx.beginPath();
-  ctx.arc(0, 0, 30, 0, Math.PI * 2);  // Outer circle of the wheel (radius = 30)
-  ctx.fillStyle = wheelGradient;       // Apply the gradient
-  ctx.fill();
-
-  // Draw the inner wheel (solid color for contrast)
-  ctx.beginPath();
-  ctx.arc(0, 0, 18, 0, Math.PI * 2);  // Inner circle of the wheel (radius = 18)
-  ctx.fillStyle = '#999';              // Darker gray color for the inner wheel
-  ctx.fill();
-
-  // Add a small white shine to the top-left of the wheel that spins (80% transparent)
-  ctx.save();
-  const shineX = -8;  // Horizontal offset for the shine
-  const shineY = -8;  // Vertical offset for the shine
-  ctx.translate(shineX, shineY); // Position the shine
-  ctx.beginPath();
-  ctx.arc(0, 0, 6, 0, Math.PI * 2); // Draw small circle for shine
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; // White color with 80% transparency
-  ctx.fill();
-  ctx.restore();
-
-  ctx.restore();
-});
-
-        // Draw stops
-        this.stops.forEach(stop => {
-          const stopScreenX = stop.x - camX;
-
-          if (stopScreenX > -100 && stopScreenX < canvas.width + 100) {
-            const distance = Math.abs((this.x + this.width / 2) - stop.x);
-            if (distance < 500 && stopRequested) {
-              ctx.beginPath();
-              ctx.arc(stopScreenX, this.y, 40, 0, Math.PI * 2);
-              ctx.fillStyle = 'rgba(0, 0, 255, 0.2)';
-              ctx.fill();
-            }
-
-            ctx.beginPath();
-            ctx.arc(stopScreenX, this.y, 30, 0, Math.PI * 2);
-            ctx.fillStyle = '#254E70';
-            ctx.fill();
-
-            stop.passengers.forEach((_, i) => {
-              ctx.beginPath();
-              ctx.arc(stopScreenX, this.y - 10 - (i * 10), 5, 0, Math.PI * 2);
-              ctx.fillStyle = '#37718E';
-              ctx.fill();
-            });
-
-            ctx.fillStyle = 'black';
-            ctx.font = '16px Arial';
-            ctx.fillText('Stop Passengers: ' + stop.passengers.length, stopScreenX - 30, stop.y + 50);
-            
-          }
-        });
-        drawTrafficLights();
-        // HUD
-        const uphToUpsFactor = 30 / 10000;
-const pixelsPerSecond = Math.abs(bus.vx) * 270;
-const ups = pixelsPerSecond * uphToUpsFactor;
-let speed = Math.abs(bus.vx); // pixels per frame
-
-        ctx.fillStyle = 'black';
-        ctx.font = '20px Arial';
-        ctx.fillText('Passanger Count: ' + this.passengers.length, 20, 30);
-        ctx.fillText('Distance Traveled: ' + Math.floor(bus.x / 100) + ' Units', 20, 60);
-        let lastFuelCheck = 0;
-
-        setInterval(() => {
-  if (bus.vx > 0) {
-    fuel = Math.max(fuel - 0.001 * (bus.vx / 10) , 0); // Ensure fuel doesn't go below 0
-  }
-}, 2000); // 2000 milliseconds = 2 seconds
-
-
-
-        ctx.fillText(ups.toFixed(10) + ' UPS', 20, 90);
-        ctx.fillText('Fuel: ' + fuel.toFixed(2), 20, 120);
-
-
-        // === Top Right Panel ===
-        const panelX = canvas.width - 180;
-        const panelY = 20;
-
-        ctx.fillStyle = '#f0f0f0';
-        ctx.strokeStyle = '#333';
-        ctx.lineWidth = 1.5;
-        ctx.fillRect(panelX, panelY, 160, 175);
-        ctx.strokeRect(panelX, panelY, 160, 175);
-// Proximity square
-ctx.save();
-ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-ctx.shadowBlur = 6;
-ctx.shadowOffsetX = 2;
-ctx.shadowOffsetY = 2;
-ctx.fillStyle = this.proximityActive ? '#37718E' : '#bbb';
-ctx.beginPath();
-ctx.moveTo(panelX + 16, panelY + 10);
-ctx.lineTo(panelX + 34, panelY + 10);
-ctx.quadraticCurveTo(panelX + 40, panelY + 10, panelX + 40, panelY + 16);
-ctx.lineTo(panelX + 40, panelY + 34);
-ctx.quadraticCurveTo(panelX + 40, panelY + 40, panelX + 34, panelY + 40);
-ctx.lineTo(panelX + 16, panelY + 40);
-ctx.quadraticCurveTo(panelX + 10, panelY + 40, panelX + 10, panelY + 34);
-ctx.lineTo(panelX + 10, panelY + 16);
-ctx.quadraticCurveTo(panelX + 10, panelY + 10, panelX + 16, panelY + 10);
-ctx.closePath();
-ctx.fill();
-ctx.restore();
-ctx.fillStyle = 'black';
-ctx.font = '12px Arial';
-ctx.fillText('Stop Nearby', panelX + 70, panelY + 35);
-
-// Stop requested square
-ctx.save();
-ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-ctx.shadowBlur = 6;
-ctx.shadowOffsetX = 2;
-ctx.shadowOffsetY = 2;
-ctx.fillStyle = stopRequested ? '#FF8409' : '#bbb';
-ctx.beginPath();
-ctx.moveTo(panelX + 16, panelY + 50);
-ctx.lineTo(panelX + 34, panelY + 50);
-ctx.quadraticCurveTo(panelX + 40, panelY + 50, panelX + 40, panelY + 56);
-ctx.lineTo(panelX + 40, panelY + 74);
-ctx.quadraticCurveTo(panelX + 40, panelY + 80, panelX + 34, panelY + 80);
-ctx.lineTo(panelX + 16, panelY + 80);
-ctx.quadraticCurveTo(panelX + 10, panelY + 80, panelX + 10, panelY + 74);
-ctx.lineTo(panelX + 10, panelY + 56);
-ctx.quadraticCurveTo(panelX + 10, panelY + 50, panelX + 16, panelY + 50);
-ctx.closePath();
-ctx.fill();
-ctx.restore();
-ctx.fillStyle = 'black';
-ctx.fillText('Stop Requested', panelX + 70, panelY + 75);
-
-// Brakes square
-ctx.save();
-ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-ctx.shadowBlur = 6;
-ctx.shadowOffsetX = 2;
-ctx.shadowOffsetY = 2;
-ctx.fillStyle = bBrake ? '#D7F2AE' : '#bbb';
-ctx.beginPath();
-ctx.moveTo(panelX + 16, panelY + 90);
-ctx.lineTo(panelX + 34, panelY + 90);
-ctx.quadraticCurveTo(panelX + 40, panelY + 90, panelX + 40, panelY + 96);
-ctx.lineTo(panelX + 40, panelY + 114);
-ctx.quadraticCurveTo(panelX + 40, panelY + 120, panelX + 34, panelY + 120);
-ctx.lineTo(panelX + 16, panelY + 120);
-ctx.quadraticCurveTo(panelX + 10, panelY + 120, panelX + 10, panelY + 114);
-ctx.lineTo(panelX + 10, panelY + 96);
-ctx.quadraticCurveTo(panelX + 10, panelY + 90, panelX + 16, panelY + 90);
-ctx.closePath();
-ctx.fill();
-ctx.restore();
-ctx.fillStyle = 'black';
-ctx.fillText('Air Brakes', panelX + 70, panelY + 115);
-
-// Stopped square
-ctx.save();
-ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-ctx.shadowBlur = 6;
-ctx.shadowOffsetX = 2;
-ctx.shadowOffsetY = 2;
-ctx.fillStyle = bus.vx === 0 ? '#DD0000' : '#bbb';
-ctx.beginPath();
-ctx.moveTo(panelX + 16, panelY + 130);
-ctx.lineTo(panelX + 34, panelY + 130);
-ctx.quadraticCurveTo(panelX + 40, panelY + 130, panelX + 40, panelY + 136);
-ctx.lineTo(panelX + 40, panelY + 154);
-ctx.quadraticCurveTo(panelX + 40, panelY + 160, panelX + 34, panelY + 160);
-ctx.lineTo(panelX + 16, panelY + 160);
-ctx.quadraticCurveTo(panelX + 10, panelY + 160, panelX + 10, panelY + 154);
-ctx.lineTo(panelX + 10, panelY + 136);
-ctx.quadraticCurveTo(panelX + 10, panelY + 130, panelX + 16, panelY + 130);
-ctx.closePath();
-ctx.fill();
-ctx.restore();
-ctx.fillStyle = 'black';
-ctx.fillText('Stopped', panelX + 70, panelY + 155);
-
-      }}
-    function checkStopKey() {
-      if (keys.s || keys.S) {
-        stopped = !stopped;
-        if (stopped) {
-          bus.y -= 1;
-        } else {
-          bus.y += 1;
-        }
-        keys.s = false;
-        keys.S = false;
-      }
-    }
-
-    function checkTiltKey() {
-      if (keys.t || keys.T) {
-        tilt = Math.min(5); // Tilt faster and more
-      } else {
-        tilt = Math.max(tilt - tiltSpeed, 0); // Gradually return to normal position
-      }
-    }
-    if (bus.x >= 32) {
-        randomizeNumericValues()
-      }
-      function randomizeNumericValues(obj) {
-  for (let key in obj) {
-    if (typeof obj[key] === 'number') {
-      obj[key] = Math.random() * 10000 - 5000; // Random number between -5000 and 5000
-    } else if (typeof obj[key] === 'object' && obj[key] !== null) {
-      randomizeNumericValues(obj[key]); // Recursively randomize nested objects
-    }
-  }
-}
-    document.addEventListener('keydown', (e) => {
-      keys[e.key] = true;
-      if (e.key === 'B' || e.key === 'b') bBrake = true;
-    });
-
-    document.addEventListener('keyup', (e) => {
-      keys[e.key] = false;
-      if (e.key === 'B' || e.key === 'b') bBrake = false;
-    });
-
-    setInterval(() => {
-      targetCamX = bus.x - 100;
-    }, 1);
-    let lastStopCheckX = 0;
-
-    function checkStopRequest() {
-      if (bus.passengers.length > 0 && !stopRequested) {
-        if (bus.x - lastStopCheckX >= 3000) {
-          lastStopCheckX = bus.x;
-          if (Math.random() < 0.3) {
-            stopRequested = true;
-            new Audio('bell-98033.mp3').play();
-
-          }
-        }
-      }
-    }
-    let trafficLights = [];
-    function spawnTrafficLights() {
-  const trafficLightSpacing = 124230;
-  const numTrafficLights = Math.ceil((canvas.width + 1000000000) / trafficLightSpacing); // Adjust based on the canvas width and total travel distance
-
-  for (let i = 0; i < numTrafficLights; i++) {
-    const x = i * trafficLightSpacing;
-    trafficLights.push({
-      x: x,
-      y: 600, // Random vertical position for variety
-      state: 'green', // Initial state is red
-      lastStateChange: Date.now(),
-    });
-  }
-}
-let fuelPickups = [];
-
-
-function spawnFuelPickups() {
-  const fuelSpacing = 7500;
-  const numFuelPickups = Math.ceil((canvas.width + 1000000000) / fuelSpacing);
-
-  for (let i = 0; i < numFuelPickups; i++) {
-    const x = i * fuelSpacing;
-    fuelPickups.push({
-      x: x,
-      y: 600, // Position on the road, same as traffic lights
-      collected: false,
-    });
-  }
-}
-
-  if (Math.abs(bus.x - fuelPickups.x) < 500) {
-    fuel = 100
-    collected = true
-  }
-spawnFuelPickups();
-
-// Function to update traffic light states
-
-    function updateTrafficLights() {
-  for (let light of trafficLights) {
-    if (light.state === 'red') {
-      light.state = 'green';
-    } else if (light.state === 'red') {
-      light.state = 'red';
-    } else if (light.state === 'green') {
-      light.state = 'red';
-  }}
-}
-
-function isBusNearRedLight(busX) {
-  return trafficLights.some(light => {
-    const distance = light.x - busX;
-    return distance >= 0 && distance <=   250 && light.state === 'red';
+  const keys = {};
+  let accelerating = false;
+  let braking = false;
+  let friction = 0.9999;
+ window.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if (keys[key]) return;
+    keys[key] = true;
+
+    handleKeyPress(key);
   });
+
+  window.addEventListener('keyup', e => {
+    const key = e.key.toLowerCase();
+    keys[key] = false;
+  });
+
+  function handleKeyPress(key) {
+    if (key === 'arrowright') {
+      accelerating = !accelerating;
+      braking = false;
+      friction = 0.999;
+      console.log('Accelerating:', accelerating);
+    }
+
+    if (key === 'b') {
+      braking = true;
+      console.log('Braking:', braking);
+    }
+  }
+function simulateKeyPress(key) {
+  // Create and dispatch a real keyboard event for the key
+  const event = new KeyboardEvent('keydown', { key: key, bubbles: true });
+  window.dispatchEvent(event);
+
+  // Also dispatch keyup shortly after to mimic real press-release
+  setTimeout(() => {
+    const eventUp = new KeyboardEvent('keyup', { key: key, bubbles: true });
+    window.dispatchEvent(eventUp);
+  }, 100);
+}
+
+// Existing keys state and logic...
+
+document.querySelectorAll('#quickKeyboard button').forEach(button => {
+  button.addEventListener('click', () => {
+    const key = button.getAttribute('data-key').toLowerCase();
+
+    // For numbers and 'l', simulate real keypress event
+    if (key === '1' || key === '2' || key === '3' || key === 'l') {
+      simulateKeyPress(key);
+    } else {
+      // For other keys, use previous logic:
+      if (keys[key]) return;
+      keys[key] = true;
+
+      handleKeyPress(key);
+
+      setTimeout(() => {
+        keys[key] = false;
+      }, 100);
+    }
+  });
+});
+
+  // === Simulate virtual keypress from quick keyboard buttons ===
+  document.querySelectorAll('#quickKeyboard button').forEach(button => {
+    button.addEventListener('click', () => {
+      const key = button.getAttribute('data-key').toLowerCase();
+      if (keys[key]) return;
+      keys[key] = true;
+
+      handleKeyPress(key);
+
+      setTimeout(() => {
+        keys[key] = false;
+      }, 100);
+    });
+  });
+
+    // Basic toggle popup logic (feel free to extend)
+    const popup = document.getElementById('gradientPopup');
+    document.getElementById('openGradientMenu').onclick = () => popup.classList.add('show');
+    document.getElementById('closeGradientMenu').onclick = () => popup.classList.remove('show');
+  const gradientPopup = document.getElementById("gradientPopup");
+  const openBtn = document.getElementById("openGradientMenu");
+  const closeBtn = document.getElementById("closeGradientMenu");
+
+  openBtn.onclick = () => gradientPopup.classList.add("show");
+  closeBtn.onclick = () => gradientPopup.classList.remove("show");
+
+  // Optional: Close on background click
+  gradientPopup.onclick = (e) => {
+    if (e.target === gradientPopup) {
+      gradientPopup.classList.remove("show");
+    }
+  };
+let acceleration = 0.1;      // Acceleration rate
+const almostOne = 1 - 1e-222     // Max speed
+const bridges = [];
+let camFollowX = 0;          // Camera follow target x
+let delayTimer = 0;          // For 2s delay
+let distance2 = 0;
+const lightCount = 5;
+
+// Only regenerate when the center light needs to shift
+let lastCenterIndex = null;
+
+  const canvas = document.getElementById('busCanvas');
+  const info = document.getElementById('info');
+  const ctx = canvas.getContext('2d');
+const lightColors = {
+  0: "#00ff00", // green
+  1: "#ffff00", // yellow
+  2: "#ff0000", // red
+};
+
+let sharedTimer = 0;
+let sharedState = 2; // Start on red
+
+
+let violationMessageTimer = 0;
+// Generate bridges with dark brown columns
+const bridgePositions = [500]; // Required first bridge
+while (bridgePositions.length < 10) {
+  const next = bridgePositions[bridgePositions.length - 1] + Math.floor(10000 + Math.random() * 3000);
+  bridgePositions.push(next);
+}
+
+for (const x of bridgePositions) {
+  bridges.push({ x });
+}
+
+function update(timestamp) {
+  if (!lastTimestamp) lastTimestamp = timestamp;
+  const delta = (timestamp - lastTimestamp) / 1000; // seconds elapsed since last frame
+
+  // Distance traveled increment (assuming vx is px per second)
+  distance2 += Math.abs(vx * delta);
+
+
+  // Update the display text, multiply by 2
+  const speedDisplay = document.getElementById('speedDistance');
+  speedDisplay.innerHTML = `Distance: ${(distance2 * 2).toFixed(0)} px<br>Speed: ${(vx * 2).toFixed(0)} px/s`;
+
+  lastTimestamp = timestamp;
+  requestAnimationFrame(update);
+  
+}
+
+requestAnimationFrame(update);
+
+
+window.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+
+  if (keys[key]) return; // Ignore repeat until released
+  keys[key] = true;
+
+  if (key === 'arrowright') {
+    accelerating = !accelerating; // Toggle acceleration
+    console.log('Accelerating:', accelerating);
+    braking = false
+    friction = 0.999
+  }
+
+  if (key === 'b') {
+    braking = true
+    console.log('Braking:', braking);
+  }
+});
+
+window.addEventListener('keyup', e => {
+  const key = e.key.toLowerCase();
+  keys[key] = false; // Allow toggling again on next key press
+});
+
+let audioCtxA = new (window.AudioContext || window.webkitAudioContext)();
+let idleGain, jitterGain, driveGain, driveNoiseSource;
+let currentState = "idle";
+
+let currentSystem = "D";
+let audioAStarted = false, audioBStarted = false;
+let vx = 0;
+const maxSpeed = 120;
+let violationOccurred = false;
+// === Ensure AudioContext ===
+function ensureAudioContext() {
+  if (!audioCtxA || audioCtxA.state === "closed") {
+    audioCtxA = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+
+// === Engine Tone Buffer ===
+function createEngineToneBuffer(freq = 60, duration = 2, volume = 0.2) {
+  const buffer = audioCtxA.createBuffer(1, duration * audioCtxA.sampleRate, audioCtxA.sampleRate);
+  const data = buffer.getChannelData(0);
+  const sampleRate = audioCtxA.sampleRate;
+  for (let i = 0; i < data.length; i++) {
+    data[i] = Math.sin(5)
+  }
+  return buffer;
+}
+
+// === Source with Gain ===
+function createLoopingSource(buffer, gainValue = 0.5) {
+  const source = audioCtxA.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+
+  const gain = audioCtxA.createGain();
+  gain.gain.value = gainValue;
+
+  source.connect(gain).connect(audioCtxA.destination);
+  return { source, gain };
+}
+
+// === Start Audio A ===
+let trainApproaching = false
+const MAX_INT_32 = 2147483647;
+let trainTrafficLights = [];
+let trainFlashTimer = 0;
+let trainFlashOn = true;
+// === Update Audio Based on Speed ===
+let jitterOscillator = null;
+let jitterLFOGain = null;
+let jitterOscActive = false;
+function step() {
+  if (currentSystem === "A") {
+    updateAudioSystemA(vx);
+  } else if (currentSystem === "C") {
+    updateAudioSystemC(vx)
+  }
+}
+step()
+
+// === Ensure AudioContext ===
+function ensureAudioContext() {
+  if (!audioCtxA || audioCtxA.state === "closed") {
+    audioCtxA = new (window.AudioContext || window.webkitAudioContext)();
+  }
+}
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+// Buffers and Nodes
+let idleNoise, driveNoise, jitterNoise;
+
+
+// Create white noise buffer
+function createNoiseBuffer(duration = 2, volume = 0.5) {
+  const buffer = audioCtx.createBuffer(1, duration * audioCtx.sampleRate, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * volume;
+  }
+  return buffer;
+}
+
+// Create looping white noise source
+function createNoiseSource(buffer, gainValue = 0.5) {
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+
+  const gain = audioCtx.createGain();
+  gain.gain.value = gainValue;
+
+  source.connect(gain).connect(audioCtx.destination);
+  return { source, gain };
+}
+
+// Start Audio (A-type)
+function startAudioA() {
+  idleNoise = createNoiseBuffer(0.3, 0.3);
+  jitterNoise = createNoiseBuffer(0.4, 0.8);
+  driveNoise = createNoiseBuffer(2, 0.4);
+
+  const idle = createNoiseSource(idleNoise, 0.1);
+  const jitter = createNoiseSource(jitterNoise, 0.0);
+
+  const driveSource = audioCtx.createBufferSource();
+  driveSource.buffer = driveNoise;
+  driveSource.loop = true;
+
+  driveGain = audioCtx.createGain();
+  driveGain.gain.value = 0.0;
+
+  const bandpassFilter = audioCtx.createBiquadFilter();
+  bandpassFilter.type = 'bandpass';
+  bandpassFilter.frequency.value = 201;
+  bandpassFilter.Q.value = 5;
+
+  const delayNode = audioCtx.createDelay();
+  delayNode.delayTime.value = 0.05;
+
+  const feedbackGain = audioCtx.createGain();
+  feedbackGain.gain.value = 1;
+
+  delayNode.connect(feedbackGain);
+  feedbackGain.connect(delayNode);
+
+  driveSource.connect(bandpassFilter);
+  bandpassFilter.connect(delayNode);
+  delayNode.connect(driveGain);
+  bandpassFilter.connect(driveGain);
+  driveGain.connect(audioCtx.destination);
+
+  // driveSource.playbackRate.value = 1.0; // Optional pitch
+  driveSource.start();
+
+  idle.source.start();
+  jitter.source.start();
+
+  idleGain = idle.gain;
+  jitterGain = jitter.gain;
+  driveNoiseSource = driveSource;
+
+  currentState = "idle";
+  idleGain.gain.value = 0.3;
+}
+
+// Update Engine Sound (A-type)
+function updateAudioSystemA() {
+  VX = vx
+  const speedNorm = Math.min(Math.abs(VX) / maxSpeed, 1);
+
+  if (VX < 0.5 && currentState !== "idle") {
+    currentState = "idle";
+    idleGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.5);
+    driveGain.gain.setTargetAtTime(0.01, audioCtx.currentTime, 0.4);
+    jitterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.1);
+  }
+
+  else if (VX >= 0.5) {
+    if (currentState === "idle") {
+      currentState = "jitter";
+      idleGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.1);
+      driveGain.gain.setTargetAtTime(0.01, audioCtx.currentTime, 0.1);
+      const jitterOscillator = audioCtx.createOscillator();
+      jitterOscillator.type = "sine"; // harsh wave
+      jitterOscillator.frequency.value = 10;
+
+      const jitterLFOGain = audioCtx.createGain();
+      jitterLFOGain.gain.value = 0.4;
+
+      jitterOscillator.connect(jitterLFOGain);
+      jitterLFOGain.connect(jitterGain.gain);
+
+      jitterOscillator.start();
+
+      setTimeout(() => {
+        jitterOscillator.stop();
+        jitterOscillator.disconnect();
+        jitterLFOGain.disconnect();
+
+        if (vx >= 0.5) {
+          currentState = "drive";
+          jitterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.2);
+
+          driveGain.gain.setTargetAtTime(0.01 + 0.5 * speedNorm, audioCtx.currentTime, 0.4);
+          // Optional pitch ramp:
+          // driveNoiseSource.playbackRate.setTargetAtTime(1 + 0.8 * speedNorm, audioCtx.currentTime, 0.3);
+        }
+      }, 500); // 0.5 sec jitter before drive
+    }
+
+    else if (currentState === "drive") {
+      idleGain.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.5);
+    const speedNorm = Math.min(vx / 12, 1); // Normalize for gain
+    const driveVolume = Math.min(0.01 + 0.2 * speedNorm, 0.8);
+      driveGain.gain.setTargetAtTime(driveVolume, audioCtx.currentTime, 0.2);
+    }
+  }
+  if (vx >= 12) {
+    vx = 12
+    driveGain.gain.setTargetAtTime(0.1 + 0.2 * speedNorm, audioCtx.currentTime, 0.001);
+  }
+}
+let flashAlpha = 0;
+let flashTimer = 0;
+
+    // ---------------- SYSTEM B ---------------- //
+    let cruiseGainLevel = 0.005;
+    const ctxB = new (window.AudioContext || window.webkitAudioContext)();
+    let engineOsc, engineGain, filter, delay, delayGain;
+    let noiseGain, whiteNoise, vibrationOsc, vibrationGain;
+    let cruiseToneOsc, cruiseToneOscGain;
+    let idleLFO = null, idleLFOGain = null;
+    let frequency = 160, gainLevel = 0.1;
+    let vxTimer = 0, lastAccelTime = 0;
+    let cruising = false;
+    const FREQ_MIN = 160, FREQ_MAX = 800;
+    const GAIN_MIN = 0.1, GAIN_MAX = 0.5;
+    const vxDisplay = document.getElementById('vxDisplay');
+    const accelBtn = document.getElementById('accelBtn');
+
+function createWhiteNoiseB() {
+  const buffer = ctxB.createBuffer(1, ctxB.sampleRate * 2, ctxB.sampleRate);
+  const data = buffer.getChannelData(0);
+
+  // Generate slightly smoother noise (low-frequency emphasis)
+  let lastValue = 0;
+  for (let i = 0; i < data.length; i++) {
+    // Apply slight smoothing between samples for wind-like texture
+    const rand = Math.random() * 2 - 1;
+    data[i] = (lastValue + rand * 0.05) / 1.25; // smooth blend
+    lastValue = data[i];
+  }
+
+  const source = ctxB.createBufferSource();
+  source.buffer = buffer;
+  source.loop = true;
+  return source;
 }
 
 
-// In your main update or movement logic
-function updateBusMovement() {
-  if (isBusNearRedLight(bus.x)) {
-    bus.vx = 0;
-  } else {
+function initAudioB() {
+  engineOsc = ctxB.createOscillator();
+  engineOsc.type = 'triangle';
+  engineOsc.frequency.value = 0.1;
+
+  engineGain = ctxB.createGain();
+  engineGain.gain.value = 0.8;
+
+  filter = ctxB.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 10;
+  filter.Q.value = 1.5;
+
+  delay = ctxB.createDelay();
+  delay.delayTime.value = 0.00005;
+
+  delayGain = ctxB.createGain();
+  delayGain.gain.value = 0.000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001;
+
+  whiteNoise = createWhiteNoiseB();
+  noiseGain = ctxB.createGain();
+  noiseGain.gain.value = 0.2;
+
+  vibrationOsc = ctxB.createOscillator();
+  vibrationOsc.frequency.value = 1;
+  vibrationGain = ctxB.createGain();
+  vibrationGain.gain.value = 0.8;
+
+  cruiseToneOsc = ctxB.createOscillator();
+  cruiseToneOsc.type = 'sine';
+  cruiseToneOsc.frequency.value = 900;
+
+  cruiseToneOscGain = ctxB.createGain();
+  cruiseToneOscGain.gain.value = 0.005; // <-- Always audible alongside engine
+
+  // Routing
+  whiteNoise.connect(noiseGain).connect(ctxB.destination);
+  delay.connect(delayGain).connect(delay);
+  vibrationOsc.connect(vibrationGain).connect(engineOsc.frequency);
+  engineOsc.connect(filter).connect(engineGain).connect(delay).connect(ctxB.destination);
+  engineGain.connect(ctxB.destination);
+cruiseToneOsc.connect(cruiseToneOscGain).connect(ctxB.destination);
+
+
+  vibrationOsc.start();
+  engineOsc.start();
+  cruiseToneOsc.start();
+  whiteNoise.start();
+}
+
+
+    function updateEngineB() {
+      cruiseToneOsc.frequency.setTargetAtTime(cfrequency, ctxB.currentTime, 0.15);
+      cruiseToneOscGain.gain.setTargetAtTime(cruiseGainLevel, ctxB.currentTime, 0.15);
+      engineOsc.frequency.setTargetAtTime(frequency, ctxB.currentTime, 0.2);
+      engineGain.gain.setTargetAtTime(gainLevel, ctxB.currentTime, 0.15);
+      filter.frequency.setTargetAtTime(120 + (frequency - FREQ_MIN) * 0.8, ctxB.currentTime, 0.15);
+
+    }
+    let cfrequency = 900; // Cruise tone base frequency
+let speedTimer = 0
+    function simulationStepB() {
+      const now = performance.now();
+      if (accelerating) {
+        if (lastAccelTime === 0 || now - lastAccelTime > 500) {
+          speedTimer = 0;
+          
+        }
+        lastAccelTime = now;
+        speedTimer += 1 / 60;
+
+        if (speedTimer < 16) {
+          frequency += 0.25;
+          cfrequency += 1;
+          gainLevel += 0.0000000000000000000000001;
+        } else if (speedTimer < 16.5) {
+          frequency -= 4;
+          cfrequency += 4;
+          gainLevel -= 0.000000000000000000000000001;
+        } else if (speedTimer < 26.5) {
+          frequency += 0.2;
+          cfrequency += 1;
+          gainLevel += 0.0000000000000000000000001;
+        } else if (speedTimer < 27.51 && gainLevel >= 0.04) {
+          gainLevel = 0.0001
+          cfrequency = 900
+          delay.delayTime.value = 0.0000000000000000000001;
+          frequency = 400
+        }
+      } else {
+        if (now - lastAccelTime > 500) {
+          speedTimer = 0;
+          cruising = false;
+          vibrationOffTime = null;
+        }
+        frequency -= 1.5;
+        gainLevel -= 0.001;
+      }
+      if (!accelerating) {
+        speedTimer = 0
+      }
+      if (vx >= 15) {
+        vx = 15
+      }
+      if (braking) {
+        frequency -= 3;
+        gainLevel -= 0.1;
+        cfrequency -= 10;
+        if (cfrequency <= 0) {
+          cfrequency = 0
+          cruiseGainLevel = 0.005
+        }
+        cruiseGainLevel += 0.00001
+        speedTimer = 0
+        cruising = false;
+        vibrationOffTime = null;
+      }
+
+      frequency = Math.max(FREQ_MIN, Math.min(frequency, FREQ_MAX));
+      gainLevel = Math.max(GAIN_MIN, Math.min(gainLevel, GAIN_MAX));
+      updateEngineB();
+
+      requestAnimationFrame(simulationStepB);
+    }
+let electricOsc, electricGain, dieselNoise, dieselGain, lowpass;
+const audioCtxC = new (window.AudioContext || window.webkitAudioContext)();
+let audioCStarted = false;
+
+// Track when electric started playing to stop after 5 seconds
+let electricStartTime = null;
+
+function startAudioC() {
+  if (audioCStarted) return;
+  audioCStarted = true;
+
+  electricOsc = audioCtxC.createOscillator();
+  electricGain = audioCtxC.createGain();
+  electricOsc.type = "square";
+  electricOsc.frequency.value = 100;
+  electricGain.gain.value = 0.0; // start silent
+  electricOsc.connect(electricGain).connect(audioCtxC.destination);
+
+  const bufferSize = 2 * audioCtxC.sampleRate;
+  const buffer = audioCtxC.createBuffer(1, bufferSize, audioCtxC.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+  dieselNoise = audioCtxC.createBufferSource();
+  dieselNoise.buffer = buffer;
+  dieselNoise.loop = true;
+
+  dieselGain = audioCtxC.createGain();
+  dieselGain.gain.value = 0.0;
+
+  lowpass = audioCtxC.createBiquadFilter();
+  lowpass.type = "lowpass";
+  lowpass.frequency.value = 10;
+
+  dieselNoise.connect(lowpass).connect(dieselGain).connect(audioCtxC.destination);
+
+  electricOsc.start();
+  dieselNoise.start();
+
+  electricStartTime = audioCtxC.currentTime;
+}
+const keysDown = new Set();
+// Call this continuously (e.g. in animation frame loop)
+function updateAudioSystemC() {
+  const maxSpeed = 13.5;
+  if (vx > maxSpeed) vx = maxSpeed;
+  const speedNorm = vx / maxSpeed;
+
+  if (vx === 0) {
+    // Reset when idle
+    electricOsc.frequency.setValueAtTime(100, audioCtxC.currentTime);
+    electricGain.gain.setTargetAtTime(0.0, audioCtxC.currentTime, 0.1);
+
+    dieselGain.gain.setTargetAtTime(6, audioCtxC.currentTime, 0.01);
     return;
   }
 
-  bus.x += bus.vx;
+  // Electric motor frequency ramps with speed
+  const electricFreq = 4 + speedNorm * 200;
+  electricOsc.frequency.setTargetAtTime(electricFreq, audioCtxC.currentTime, 0.2);
+
+  // Electric gain: slowly increase from 0 to 0.4 as vx goes from 0 to 2,
+  // then hold at 0.4 while diesel fades in after vx > 2.
+  let electricTargetGain = 0;
+  if (vx <= 2) {
+    electricTargetGain = 0.1 * (vx / 2);  // linear ramp 0 to 0.4
+  } else {
+    electricTargetGain = 0.1; // hold max electric gain once diesel starts
+  }
+  electricGain.gain.setTargetAtTime(electricTargetGain, audioCtxC.currentTime, 0.2);
+
+  // Diesel gain: fade in starting from vx > 2 up to max at vx=12
+  if (vx > 2) {
+    const dieselNorm = (vx - 2) / (maxSpeed - 2);
+    const dieselVol = 0.2 + 0.5 * dieselNorm;
+    dieselGain.gain.setTargetAtTime(dieselVol, audioCtxC.currentTime, 0.3);
+
+    // Adjust diesel tone based on acceleration
+    const filterFreq = accelerating
+      ? 200 + 1000 * dieselNorm  // Brighter when accelerating
+      : 100 + 500 * dieselNorm; // Deeper when slowing
+    lowpass.frequency.setTargetAtTime(filterFreq, audioCtxC.currentTime, 0.3);
+  } else {
+    dieselGain.gain.setTargetAtTime(5, audioCtxC.currentTime, 0.01);
+  }
+}
+
+
+function animate2() {
+  updateAudioSystemC();
+  requestAnimationFrame(animate2);
+}
+// --- Keyboard Controls ---
+window.addEventListener('keydown', e => {
+  const key = e.key.toLowerCase();
+  if (keysDown.has(key)) return; // Prevent repeat while held
+
+  if (key === '3') {
+    if (!audioBStarted) {
+      initAudioB();
+      simulationStepB();
+      audioBStarted = true;
+    }
+    ctxB.resume();
+    audioCtxA.suspend();
+    audioCtxC.suspend?.();
+    currentSystem = "B";
+  } else if (key === '1') {
+    if (!audioAStarted) {
+      startAudioA();
+      audioAStarted = true;
+    }
+    audioCtxA.resume();
+    ctxB.suspend();
+    audioCtxC.suspend?.();
+    currentSystem = "A";
+  } else if (key === '2') {
+    if (!audioCStarted) {
+      startAudioC();
+    }
+    audioCtxC.resume();
+    ctxB.suspend?.();
+    audioCtxA.suspend();
+    currentSystem = "C";
+    animate2(); 
+  }
+
+  keysDown.add(key);
+});
+
+window.addEventListener('keyup', e => {
+  keysDown.delete(e.key.toLowerCase());
+});
+
+// --- System Toggle Function ---
+async function toggleSystems() {
+  if (currentSystem === "A") {
+    await audioCtxA.suspend();
+  } else if (currentSystem === "B") {
+    await ctxB.suspend();
+  } else if (currentSystem === "C") {
+    await audioCtxC.suspend?.();
+  }
+
+  systemIndex = (systemIndex + 1) % systemOrder.length;
+  const nextSystem = systemOrder[systemIndex];
+
+  if (nextSystem === "A") {
+    if (!audioAStarted) {
+      startAudioA();
+    }
+    await audioCtxA.resume();
+  } else if (nextSystem === "B") {
+    if (!audioBStarted) {
+      initAudioB();
+      simulationStepB();
+      audioBStarted = true;
+    }
+    await ctxB.resume();
+  } else if (nextSystem === "C") {
+    if (!audioCStarted) {
+      startAudioC();
+      updateAudioSystemC()
+    }
+    await audioCtxC.resume();
+  }
+
+  currentSystem = nextSystem;
+}
+let trafficLights = [];
+const trafficLightSpacing = 20000;
+const firstLightX = 1000;
+const lightRadius = 12;
+
+// --- Global Variables ---
+const STOP_INTERVAL = 7500;
+const STOP_SPAWN_LIMIT = 50000000;
+const STOP_RADIUS = 20;
+const STOP_DETECTION_RANGE = 500;
+const STOP_COUNTER_TRIGGER = 1000;
+
+let stops = [];
+let passengersOnBoard = 0;
+let nextStopRequest = null;
+let pendingDropRequest = false;
+let collectedDisplay = null;
+let collectedDisplayTimeout = null;
+
+// --- Call this ONCE on game start/reset ---
+let showNotice = false;
+let distance = 3000; // define outside loop
+function generateStops() {
+  stops = [];
+  for (let x = 10000; x <= STOP_SPAWN_LIMIT; x += STOP_INTERVAL) {
+    stops.push({
+      x: x,
+      collected: false,
+      special: Math.random() < 0.5 // 50% chance for special stop
+    });
+  }
+}
+generateStops(); // Initialize stops
+
+  let currentBusIndex = 0;
+
+let startAudioCalled = false;
+let amount = 0
+
+
+  let camX = 0;
+  const tilt = 0;
+  function drawMinimap(bus, camX) {
+  const minimap = document.getElementById('minimap');
+  const ctx = minimap.getContext('2d');
+  const w = minimap.width;
+  const h = minimap.height;
+
+  ctx.clearRect(0, 0, w, h);
+
+  const RANGE = 20000; // Show ±10,000px from bus
+  const startX = bus.x - RANGE / 2;
+  const endX = bus.x + RANGE / 2;
+
+  // Background
+  ctx.fillStyle = "#ddd";
+  ctx.fillRect(0, h / 3, w, h / 3);
+
+  // Only draw stops within the visible window
+  for (const stop of stops) {
+    if (stop.x >= startX && stop.x <= endX) {
+      const percent = (stop.x - startX) / RANGE;
+      const x = percent * w;
+      const color = stop.special ? "#777" : "#007bff";
+      ctx.beginPath();
+      ctx.arc(x, h / 2, 4, 0, Math.PI * 2);
+      ctx.fillStyle = stop.collected ? "#ccc" : color;
+      ctx.fill();
+    }
+  }
+
+  // Draw the bus at center of minimap
+  const busX = (bus.x - startX) / RANGE * w;
+  ctx.beginPath();
+  ctx.arc(busX, h / 2, 5, 0, Math.PI * 2);
+  ctx.fillStyle = "#ff0000";
+  ctx.fill();
+// === Draw Train Traffic Lights on Minimap ===
+for (const light of trainTrafficLights) {
+  if (light.x >= startX && light.x <= endX) {
+    const percent = (light.x - startX) / RANGE;
+    const x = percent * w;
+
+    ctx.beginPath();
+    ctx.arc(x, h / 2, 4, 0, Math.PI * 2); // 10 px above center
+    ctx.fillStyle = light.state === 1 ? "#ff0000" : "#000000";
+    ctx.fill();
+  }
+}
+
+  // Viewport box based on screen size (approximation)
+  const screenWidthPx = window.innerWidth;
+  const percentCamStart = (camX - startX) / RANGE;
+  const percentCamEnd = (camX + screenWidthPx - startX) / RANGE;
+  const camStart = percentCamStart * w;
+  const camEnd = percentCamEnd * w;
+
+  ctx.strokeStyle = "#444";
+  ctx.strokeRect(camStart, h / 3, camEnd - camStart, h / 3);
 }
 
 
 
-// Function to draw traffic lights (top layer)
-function drawTrafficLights() {
-  trafficLights.forEach(light => {
-    ctx.beginPath();
-    ctx.arc(light.x - camX, light.y, 20, 0, Math.PI * 2);
 
-    if (light.state === 'green') {
-      ctx.fillStyle = 'green';
-    } else if (light.state === 'red') {
-      ctx.fillStyle = 'red';
-    } else {
-      ctx.fillStyle = 'red';
+  const fuelPickups = [
+    { x: 100, collected: false },
+    { x: 300, collected: true },
+    { x: 500, collected: false },
+  ];
+  // === GLOBAL STATE ===
+const trainTracks = [];
+const spawnedTracks = new Set();
+const trains = [];
+
+
+const trackSpacing = 50000;
+const firstTrack = 5000;
+
+// === GENERATE TRAIN TRACKS ===
+function generateTracksUpTo(xLimit) {
+  for (let x = firstTrack; x <= xLimit; x += trackSpacing) {
+    if (!trainTracks.some(t => t.x === x)) {
+      const isDouble = Math.random() < 0.9;
+      trainTracks.push({ x, isDouble });
+    }
+  }
+}
+
+// === TRAIN SPAWNING ===
+function spawnTrain(trackX) {
+  trains.push({
+    worldX: trackX,
+    scale: 0.1,
+    growthSpeed: 0.005,
+    spawnTime: Date.now()
+  });
+}
+
+function checkTrainSpawn(bus) {
+  trainTracks.forEach(({ x }) => {
+    if (bus.x >= x - 1000 && !spawnedTracks.has(x)) {
+      spawnTrain(x);
+      spawnedTracks.add(x);
+    }
+  });
+}
+
+// === TRAIN DRAWING ===
+function drawTrains(ctx, camX) {
+  const now = Date.now();
+  for (let i = trains.length - 1; i >= 0; i--) {
+    const train = trains[i];
+    train.scale += train.growthSpeed;
+
+    if (train.scale > 4 || now - train.spawnTime > 30000) {
+      trains.splice(i, 1);
+      continue;
     }
 
+    const screenX = train.worldX - camX;
+    const y = 500;
+    const width = 100 * train.scale;
+    const height = 100 * train.scale;
+
+    ctx.fillStyle = "#333";
+    ctx.fillRect(screenX - width / 2, y - height, width, height);
+    ctx.fillStyle = "#ccc";
+    ctx.fillRect(screenX - width / 4, y - height + 10 * train.scale, width / 2, 12 * train.scale);
+    ctx.fillStyle = "#222";
+    ctx.beginPath();
+    ctx.ellipse(screenX - width / 3, y - 10, 10 * train.scale, 5 * train.scale, 0, 0, Math.PI * 2);
+    ctx.ellipse(screenX + width / 3, y - 10, 10 * train.scale, 5 * train.scale, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// === TRACK DRAWING ===
+function drawTracks(ctx, camX) {
+  trainTracks.forEach(({ x }) => {
+    const screenX = x - camX;
+    const y = 500;
+    ctx.strokeStyle = "#6B4C3B";
+    ctx.lineWidth = 100;
+    ctx.beginPath();
+    ctx.moveTo(screenX - 160, y);
+    ctx.lineTo(screenX + 160, y);
+    ctx.stroke();
+  });
+}
+
+// === TRAIN TRAFFIC LIGHTS ===
+function generateTrainTrafficLights(busX) {
+  trainTrafficLights = [];
+  trainTracks.forEach(({ x }) => {
+    if (Math.abs(busX - x) < 5000) {
+      trainTrafficLights.push({ x, state: 0 });
+    }
+  });
+}
+
+function updateTrainTrafficLights(deltaTime) {
+  if (trains.length > 0) {
+    trainFlashTimer += deltaTime;
+    if (trainFlashTimer >= 500) {
+      trainFlashOn = !trainFlashOn;
+      trainFlashTimer = 0;
+    }
+    trainTrafficLights.forEach(light => {
+      light.state = trainFlashOn ? 1 : 0;
+    });
+  } else {
+    trainFlashTimer = 0;
+    trainFlashOn = true;
+    trainTrafficLights.forEach(light => {
+      light.state = 0;
+    });
+  }
+}
+
+function drawTrainTrafficLights(ctx, camX, canvasWidth) {
+  const y = 520;
+  trainTrafficLights.forEach(light => {
+    const x = light.x - camX;
+    if (x < -100 || x > canvasWidth + 3000) return;
+    ctx.beginPath();
+    ctx.arc(x, y, 20, 0, Math.PI * 2);
+    ctx.fillStyle = light.state === 1 ? "#ff0000" : "#000000";
+    ctx.fill();
+
+
+    // Draw railway rectangle 100px after the traffic light
+    // Find traffic light x for this track (if any)
+      const railX = (light.x + 290) - camX;  // 100 px after light
+
+      // Draw brown rectangle representing railway tie
+      const rectWidth = 150;
+      const rectHeight = 30;
+      ctx.fillStyle = "#6B4C3B";
+      ctx.fillRect(railX - rectWidth / 2, y - 25, rectWidth, rectHeight);
+
+      // Draw two small squares inside the rectangle
+      const squareSize = 35;
+      const gap = 30; // space between squares
+
+      ctx.fillStyle = "#333"; // darker brown for squares
+
+      // Left square
+      ctx.fillRect(railX - gap - squareSize / 2, y - 25, squareSize, squareSize);
+
+      // Right square
+      ctx.fillRect(railX + gap - squareSize / 2, y - 25, squareSize, squareSize);
+    
+  });
+}
+
+function isTrainLightBlocking(busX) {
+  return trainTrafficLights.some(light =>
+    Math.abs(busX - light.x) < 500 && light.state === 1
+  
+  );
+}
+
+  // Bus data for each type
+  const buses = [
+    {
+      name: "Gillig 29'",
+      x: 200,
+      y: 300,
+      width: 450,   // slightly shorter than before (was 400)
+      height: 180,
+      wheelAngle: 0.1,
+      doorPositions: [300, 340], // relative to bus.x
+      doorSize: {width: 40, height: 130},
+      window: { x: 30, y: 40, width: 250, height: 93.33},
+      wheelOffsets: [125, 260],
+      window2: { x: 380, y: 45, width: 0, height: 0 },
+      bodyBezierOffset: 63,
+    },
+    {
+      name: "Gillig 40'",
+      x: 200,
+      y: 300,
+      width: 470,
+      height: 180,
+      wheelAngle: 0.1,
+      doorPositions: [350, 390], // doors moved further back for longer bus
+      backDoorPositions: [140, 180],
+      doorSize: {width: 40, height: 130},
+      window: { x: 0, y: 40, width: 140, height: 87.33},
+      wheelOffsets: [100, 300],
+      window2: { x: 220, y: 40, width: 130, height: 87.33 },
+      bodyBezierOffset: 70,
+    },
+    {
+      name: "New Flyer Xcelsior 40'",
+      x: 200,
+      y: 300,
+      width: 500,
+      height: 180,
+      wheelAngle: 0.1,
+      doorPositions: [405, 430], // doors moved further back for longer bus
+      doorSize: {width: 50, height: 130},
+      backDoorPositions: [160, 205],
+      window: { x: 55, y: 40, width: 105, height: 80.33},
+      wheelOffsets: [125, 360],
+      window2: { x: 255, y: 40, width: 150, height: 93.33 },
+      bodyBezierOffset: 70,
+    }
+  ];
+  // Control flags
+let driverLocked = false;
+let isLowered = false;
+let xB = 0
+// Kneeling amount
+const LOWER_OFFSET = 10;// Default gradient stops
+let gradientStops = [
+  { offset: 0, color: '#d3d3d3' },
+  { offset: 1, color: '#d3d3d3' }
+];
+let points = parseInt(localStorage.getItem('playerPoints')) || 1;
+// Save to localStorage
+function savePoints() {
+  localStorage.setItem('playerPoints', points);
+}
+
+// Load from localStorage or fallback
+function loadGradientStops() {
+  const saved = localStorage.getItem('busGradientStops');
+  if (saved) {
+    gradientStops = JSON.parse(saved);
+  }
+}
+loadGradientStops();
+let stopHistory = JSON.parse(localStorage.getItem("stopHistory") || "[]");
+
+function savePoints() {
+  localStorage.setItem("points", points);
+}
+
+function saveStopHistoryEntry(entry) {
+  stopHistory.push(entry);
+  localStorage.setItem('stopHistory', JSON.stringify(stopHistory));
+}
+
+// Update the color pickers with loaded colors
+const startColorPicker = document.getElementById('endColorPicker');
+const endColorPicker = document.getElementById('startColorPicker');
+
+startColorPicker.value = gradientStops[0].color;
+endColorPicker.value = gradientStops[1].color;
+
+// Save function
+function saveGradientStops() {
+  localStorage.setItem('busGradientStops', JSON.stringify(gradientStops));
+}
+
+// Set gradient colors and save
+function setBusGradientColors(startColor, endColor) {
+  gradientStops = [
+    { offset: 0, color: startColor },
+    { offset: 1, color: endColor }
+  ];
+  saveGradientStops();
+}
+
+// Listen for changes on the color pickers
+startColorPicker.addEventListener('input', (e) => {
+  setBusGradientColors(e.target.value, gradientStops[1].color);
+});
+
+endColorPicker.addEventListener('input', (e) => {
+  setBusGradientColors(gradientStops[0].color, e.target.value);
+});
+
+// In your draw function, use gradientStops like this:
+
+
+
+window.addEventListener('keydown', e => {
+  if ((e.key === 'l' || e.key === 'l') && vx === 0) {
+    driverLocked = !driverLocked
+    isLowered = !isLowered;
+    console.log(isLowered ? "⬇ Bus lowered (kneeling)." : "⬆ Bus raised.");
+  }
+});
+function saveGradient(stops) {
+  if (!Array.isArray(stops)) return;
+
+  try {
+    localStorage.setItem('busGradient', JSON.stringify(stops));
+  } catch (e) {
+    console.error('Failed to save gradient:', e);
+  }
+}
+
+let lastDrawTime = performance.now();
+const signalSigns = [];
+const maxSigns = 5;
+function exportGradient() {
+  const blob = new Blob([JSON.stringify(gradientStops, null, 2)], {
+    type: 'application/json',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'bus-gradient.sg';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+document.getElementById('importGradientFile').addEventListener('change', function (event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (Array.isArray(imported)) {
+        gradientStops = imported;
+        saveGradientStops()
+        alert("Gradient imported successfully!");
+      } else {
+        alert("Invalid gradient format.");
+      }
+    } catch (err) {
+      alert("Failed to load gradient: " + err.message);
+      saveGradientStops()
+    }
+  };
+  reader.readAsText(file);
+});
+saveGradientStops()
+
+function drawBus() {
+
+const baseBus = buses[currentBusIndex];
+const bus = { ...baseBus }; // Clone so we can adjust Y
+if (vx === 0) {
+bus.y += isLowered ? LOWER_OFFSET : 0;
+}
+  // Keyboard events
+  window.addEventListener('keydown', e => keys[e.key] = true);
+  window.addEventListener('keyup', e => keys[e.key] = false);
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+ctx.shadowBlur = 10;
+ctx.shadowOffsetX = 4;
+ctx.shadowOffsetY = 4;
+
+// Sky background
+ctx.fillStyle = '#87CEEB'; // light blue
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Road under bus
+ctx.fillStyle = '#333'; // dark gray road
+ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
+drawSignalSigns(ctx, camX, canvas.width);
+
+// Draw bridge columns and bridge structure
+for (const bridge of bridges) {
+  const screenX = bridge.x - bus.x + canvas.width / 2;
+
+  // Wide dark cyan base under the road
+  ctx.fillStyle = '#008B8B'; // dark cyan
+  ctx.fillRect(screenX - 160, canvas.height - 585, 300, 30);
+
+  // Layered 2D "z-style" deck (brown, sits on top)
+  ctx.fillStyle = '#D6BDA3'; // lighter brown bridge top
+  ctx.fillRect(screenX - 170, canvas.height - 625, 320, 50);
+
+  // Wide dark cyan base under the road
+  ctx.fillStyle = '#008B8B'; // dark cyan
+  ctx.fillRect(screenX + 190, canvas.height - 585, 300, 30);
+
+  // Layered 2D "z-style" deck (brown, sits on top)
+  ctx.fillStyle = '#D6BDA3'; // lighter brown bridge top
+  ctx.fillRect(screenX + 180, canvas.height - 625, 320, 50);
+
+}
+
+ctx.save();
+// Apply tilt
+ const busGradient = ctx.createLinearGradient(
+  bus.x - camX,
+  bus.y + bus.height,
+  bus.x - camX + bus.width,
+  bus.y
+);
+if (currentBusIndex === 2) {
+  ctx.save();
+
+  // Flip vertically around a horizontal axis at Y = flipY
+  const flipY = bus.y + 20;
+  ctx.translate(0, flipY);
+  ctx.scale(1, -1);
+
+  // Calculate drawing origin
+  const startX = bus.x - camX + bus.width - 470;
+  const startY = 10;
+
+  ctx.beginPath();
+  ctx.moveTo(startX, startY);
+  ctx.lineTo(startX, startY + 40);
+  ctx.lineTo(startX + 370, startY + 40);
+  ctx.quadraticCurveTo(startX + 420, startY + 40, startX + 420, startY);
+  ctx.lineTo(startX + 300, startY);
+  ctx.lineTo(startX, startY);
+  ctx.closePath();
+
+  // === Fill style logic ===
+  const useGradient = true; // 🔁 Change to false if you want solidColor
+
+  if (useGradient) {
+    const curveGradient = ctx.createLinearGradient(
+      bus.x - camX,
+      bus.y + bus.height,
+      bus.x - camX + bus.width,
+      bus.y
+    );
+    for (const stop of gradientStops) {
+      curveGradient.addColorStop(stop.offset, stop.color);
+    }
+    ctx.fillStyle = curveGradient;
+  } else {
+    const solidColor = '#444'; //  Replace this if you want a different solid color
+    ctx.fillStyle = solidColor;
+  }
+
+  ctx.fill();
+  ctx.restore();
+}
+  for (const stop of gradientStops) {
+    busGradient.addColorStop(stop.offset, stop.color);
+  }
+
+ctx.translate(bus.x - camX + bus.width / 2, bus.y + bus.height / 2);
+ctx.rotate(tilt * Math.PI / 180);
+ctx.translate(-(bus.x - camX + bus.width / 2), -(bus.y + bus.height / 2));
+
+const leftX = bus.x - camX;
+const rightX = leftX + bus.width;
+const topY = bus.y;
+const bottomY = bus.y + bus.height;
+const curveStartY = topY + bus.height * 0.0;
+const curveEndY = topY + bus.height * 0.59;
+const ctrlOffset = 30;
+if (currentBusIndex === 1) {
+
+const flipY = bus.y + 20;
+const startX = bus.x - camX + bus.width - 417;
+const startY = 20;
+
+ctx.save();
+
+ctx.translate(0, flipY);
+ctx.scale(1, -1); // Flip vertically
+
+ctx.beginPath();
+
+// Vertical line down (originally 60 px tall, now 42 px)
+ctx.moveTo(startX - 50, startY);
+ctx.lineTo(startX - 50, startY + 42);
+
+// Adjusted horizontal line length and curve details
+const totalHorizontalLength = 102.4 * 1.3; // 133 px
+
+const lineStartX = startX - 50;
+const lineY = startY + 42;
+
+// Break down horizontal length into parts
+const part1Length = totalHorizontalLength * 0.8;  // 40% straight
+const part2Length = totalHorizontalLength * 0.2;  // 20% curved down 10 px
+const part3Length = totalHorizontalLength * 0.8;  // 40% straight again
+
+// Part 1: straight horizontal line (40%)
+ctx.lineTo(lineStartX + part1Length, lineY);
+
+// Part 2: curve down 10px with quadratic curve (20%)
+const curveControlX = lineStartX + part1Length + 30;
+const curveControlY = lineY + 10;
+const curveEndX = lineStartX + part1Length + part2Length - 0;
+const curveEndY = lineY + 10;
+
+ctx.quadraticCurveTo(curveControlX, curveControlY, curveEndX, curveEndY);
+
+// Part 3: straight horizontal line (40%) from curve end to total length, 10 px lower
+ctx.lineTo(lineStartX + totalHorizontalLength, lineY + 10);
+
+// Diagonal line \ with length scaled proportionally to vertical height
+
+const angleDeg = 75;
+const angleRad = angleDeg * Math.PI / 180;
+
+// Original length was 30, scaled 1.5 = 45 px for 60 px height
+// New length scales proportionally: 45 * (42 / 60) = 31.5 px approx
+const length = 30 * 1.5 * (42 / 60); // ~31.5 px
+
+const dx = Math.cos(angleRad) * length;
+const dy = Math.sin(angleRad) * length;
+
+ctx.lineTo(startX + dx, startY + 59 + dy);
+
+// Close shape top, scale closing length horizontally
+ctx.lineTo(startX + 170 * 1.1, startY); // 169 px
+ctx.lineTo(startX, startY);
+
+ctx.closePath();
+
+ctx.fillStyle = 'rgba(211, 211, 211, 1)';
+ctx.fill();
+
+ctx.restore();
+}
+// Length of the bottom-right diagonal (studle)
+const studleHeight = 10;
+const studleAngleX = 45; // small inward angle
+
+ctx.beginPath();
+ctx.moveTo(leftX, topY);
+ctx.lineTo(leftX, bottomY);
+
+// Draw bottom edge to before studle
+ctx.lineTo(rightX - studleAngleX + 40, bottomY);
+
+// Add upward diagonal studle
+ctx.lineTo(rightX, bottomY - studleHeight);
+
+// Draw up-right curve
+ctx.lineTo(rightX, curveEndY);
+ctx.bezierCurveTo(
+  rightX, curveStartY,
+  rightX - ctrlOffset, topY,
+  rightX - 65 - ctrlOffset, topY
+);
+
+// Flat roof back to front
+ctx.lineTo(leftX, topY);
+ctx.closePath();
+
+ctx.fillStyle = busGradient;
+ctx.fill();
+ctx.restore();
+
+  // --- Doors ---
+  // === 1. UNIVERSAL DOOR GRADIENT DRAWING ===
+ctx.save();
+
+// Door gradient
+const doorGradient = ctx.createLinearGradient(0, 0, 0, bus.doorSize.height);
+doorGradient.addColorStop(0, 'rgba(40, 40, 40, 1)');
+doorGradient.addColorStop(1, 'rgba(40, 40, 40, 1)');
+ctx.fillStyle = doorGradient;
+
+buses[currentBusIndex].doorPositions.forEach(doorX => {
+  // Skip door 430 if it's bus 2 (we’ll draw that separately with curve)
+  if (currentBusIndex === 2 && doorX === 430) return;
+
+  const x = bus.x - camX + doorX;
+  const y = bus.y + 40;
+  const doorW = bus.doorSize.width;
+  const doorH = bus.doorSize.height;
+
+  ctx.fillRect(x, y, doorW, doorH);
+});
+
+
+ctx.restore();
+
+// === 2. SPECIAL CURVED DOOR FOR BUS 2 ===
+if (currentBusIndex === 2) {
+  const doorX = 430;
+  const x = bus.x - camX + doorX + 20;
+  const y = bus.y + 40;
+  const doorW = bus.doorSize.width - 20;
+  const doorH = bus.doorSize.height;
+
+  ctx.save();
+  ctx.translate(0, y + doorH);
+  ctx.scale(1, -1); // Flip over X-axis
+  ctx.fillStyle = doorGradient; // use the same gradient
+
+  ctx.beginPath();
+  ctx.moveTo(x, 0);
+  ctx.lineTo(x, doorH);
+  ctx.lineTo(x + doorW - 10, doorH);
+  ctx.quadraticCurveTo(
+    x + doorW, doorH,
+    x + doorW, doorH - 100
+  );
+  ctx.lineTo(x + doorW, 0);
+  ctx.closePath();
+
+  ctx.fill();
+
+
+  ctx.restore();
+}
+if (currentBusIndex === 1) {{
+const flipY = bus.y + 20;
+ctx.translate(0, flipY);
+ctx.scale(1, -1);
+
+const startX = bus.x - camX + bus.width - 35;
+const startY = -120;
+
+ctx.beginPath();
+ctx.moveTo(startX, startY);
+ctx.lineTo(startX, startY + 100);
+
+// Make horizontal segment shorter (e.g., 220px instead of 370)
+ctx.lineTo(startX + 0, startY + 100);
+
+// Adjust curve control point (was +440)
+ctx.quadraticCurveTo(
+  startX + 30, // control X
+  startY + 100,  // control Y
+  startX + 30, // end X
+  startY + 0    // end Y
+);
+
+// Adjust closing top line (was +300)
+ctx.lineTo(startX + 10, startY);
+ctx.lineTo(startX, startY);
+ctx.closePath();
+
+ctx.fillStyle = 'rgba(30, 30, 30, 1)';
+ctx.fill();
+
+ctx.restore();
+}
+}
+
+drawBackDoors(bus);
+  // --- Windows ---
+  function drawWindow(window) {
+    ctx.save();
+    const gradient = ctx.createLinearGradient(0, 0, 0, window.height);
+    gradient.addColorStop(0, 'rgba(30, 30, 30, 1)');
+    gradient.addColorStop(1, 'rgba(30, 30, 30, 1)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(bus.x - camX + window.x, bus.y + window.y, window.width, window.height);
+  }
+
+  drawWindow(bus.window);
+  drawWindow(bus.window2);
+
+  // --- Fuel Pickups ---
+  fuelPickups.forEach(pickup => {
+    if (!pickup.collected) {
+      ctx.fillStyle = 'orange';
+      ctx.fillRect(pickup.x - bus.x + canvas.width / 2 - 10, 400, 20, 20);
+    }
+  });
+ctx.restore();
+  // --- Wheels ---
+  const wheelOffsetY = tilt * 0.2;
+  bus.wheelOffsets.forEach(offset => {
+    ctx.save();
+    const wheelX = bus.x - camX + offset;
+    let wheelY = bus.y + bus.height + wheelOffsetY;
+    if (driverLocked) {
+      wheelY = wheelY - 10
+    }
+    ctx.translate(wheelX, wheelY);
+    ctx.rotate(bus.wheelAngle);
+
+    const wheelGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
+    wheelGradient.addColorStop(0, '#393939');
+    wheelGradient.addColorStop(0.5, '#242424');
+    wheelGradient.addColorStop(1, '#101010');
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 30, 0, Math.PI * 2);
+    ctx.fillStyle = wheelGradient;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(0, 0, 18, 0, Math.PI * 2);
+    ctx.fillStyle = '#999';
+    ctx.fill();
+
+    ctx.save();
+    ctx.translate(-8, -8);
+    ctx.beginPath();
+    ctx.arc(0, 0, 6, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+    drawTrainTrafficLights(ctx, camX, canvas.width);
+
+  });
+
+
+for (const bridge of bridges) {
+  const screenX = bridge.x - bus.x + canvas.width / 2;
+  
+  // Bridge columns and top rectangle
+  ctx.fillStyle = '#CAB298'; // dark brown column
+  ctx.fillRect(screenX - 55, 100, 100, 450);
+
+  ctx.fillStyle = '#CAB298'; // dark brown column
+  ctx.fillRect(screenX + 295, 100, 100, 450);
+
+  ctx.fillStyle = '#CAB298'; // dark brown top rectangle
+  ctx.fillRect(screenX - 125, 40, 590, 100);
+}
+// Full width brown bar at bottom, fixed to screen width
+
+const barY = 550;
+const barHeight = 100;
+const barX = 0;
+const barWidth = canvas.width;  // Full canvas width
+
+ctx.fillStyle = '#999'; // dark brown bar color
+ctx.fillRect(barX, barY, barWidth, barHeight);
+
+// Labels and their glow colors
+const labels = [
+  { label: 'Stop Nearby', active: distance < 1000, glowColor: 'rgba(100, 150, 255, 0.7', circleColor: '#337BFF' },           
+  {label: 'Stop Requested', active: pendingDropRequest, glowColor: 'rgba(255, 165, 0, 0.8)', circleColor: '#FFA500' },
+  { label: 'Air Brakes', active: braking, glowColor: 'rgba(163, 217, 165, 0.8)', circleColor: '#A3D9A5' },
+  { label: 'Stopped', active: vx === 0, glowColor: 'rgba(221, 0, 0, 0.7)', circleColor: '#DD0000' }                    
+];
+
+ctx.font = '10px Arial';
+ctx.textAlign = 'center';
+
+// Vertical positions for text (label above, status below)
+const labelY = barY + 10;
+const statusY = barY + 25;
+const panelX = 35
+const panelY = statusY + 85
+// Horizontal spacing
+const segmentWidth = barWidth / labels.length;
+
+labels.forEach((item, i) => {
+  const centerX = segmentWidth * i + segmentWidth / 2;
+
+  // Label text (smaller, above)
+  ctx.fillStyle = '#ccc';
+  ctx.fillText(item.label, centerX, labelY);
+
+  // Status indicator: circle with glow if active, gray if not
+  ctx.save();
+  if (item.active) {
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.shadowColor = item.glowColor;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = item.circleColor;
+  } else {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#888'; // gray when off
+  }
+
+  ctx.beginPath();
+  ctx.arc(centerX, statusY, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+  // Reset font to default for next iteration
+  ctx.font = '10px Arial';
+});
+
+
+
+  const now = performance.now();
+  const deltaTime = now - lastDrawTime;
+  
+  lastDrawTime = now;
+  drawTrainTrafficLights(ctx, camX, canvas.width);
+  updateTrafficLights(deltaTime)
+  updateTrainTrafficLights(deltaTime);
+  drawTracks(ctx);
+  xB = bus.x
+  checkTrafficLightViolations(bus);
+  drawTrafficLights(ctx, camX);  
+// Call this every frame, passing deltaTime in milliseconds
+
+// --- Draw Stops ---
+for (const stop of stops) {
+  if (!stop.collected) {
+    const screenX = stop.x - camX;
+    const stopY = window.innerHeight * 0.5;
+
+    // Outer glow (different for special stops)
+    ctx.beginPath();
+    ctx.arc(screenX, stopY, STOP_RADIUS + 10, 0, Math.PI * 2);
+    ctx.fillStyle = stop.special
+      ? 'rgba(128, 128, 128, 0.4)'
+      : 'rgba(100, 150, 255, 0.3)';
+    ctx.fill();
+
+    // Inner circle
+    ctx.beginPath();
+    ctx.arc(screenX, stopY, STOP_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = stop.special ? '#888' : '#337BFF';
+    ctx.fill();
+  }
+}
+for (const stop of stops) {
+  if (!stop.collected && vx === 0 && Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE) {
+    
+    // Special stop check
+    if (stop.special && !driverLocked) continue;
+
+    stop.collected = true;
+
+    // Passenger logic
+    const newPassengers = Math.floor(Math.random() * 2 + 2); // 2–3
+    const dropOff = Math.floor(Math.random() * 2 + 2);       // 2–3
+    const basePoints = newPassengers;
+    const multiplier = stop.special ? 3 : 1;
+    const actualPoints = basePoints * multiplier;
+
+    if (passengersOnBoard < 16) {
+      passengersOnBoard += newPassengers;
+      points += actualPoints;
+      savePoints();
+    } else {
+      passengersOnBoard -= 6;
+    }
+
+    if (passengersOnBoard >= 4) {
+      passengersOnBoard = Math.max(passengersOnBoard - dropOff, 0);
+    }
+
+    // Clear drop request
+    if (nextStopRequest && stop.x >= bus.x) {
+      pendingDropRequest = false;
+      nextStopRequest = null;
+    }
+
+    // Save stop event to history
+    saveStopHistoryEntry({
+      x: (distance2) * 2,
+      time: Date.now(),
+      special: stop.special,
+      passengersAdded: newPassengers,
+      passengersDropped: dropOff,
+      pointsGained: actualPoints
+    });
+
+    break;
+  }
+}
+const stopNoticeDiv = document.getElementById('stopNotice');
+
+for (const stop of stops) {
+  if (!stop.collected && stop.x > bus.x) {
+    distance = Math.floor((stop.x - bus.x) / 2);
+
+    break;
+  }
+}
+
+
+ctx.fillStyle = '#f0f0f0';
+ctx.strokeStyle = '#333';
+ctx.lineWidth = 2;
+ctx.fillRect(panelX, panelY, 180, 190);
+ctx.strokeRect(panelX, panelY, 180, 190);
+
+
+labels.forEach((item, i) => {
+  const boxY = panelY + 10 + i * 45;
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+  ctx.shadowBlur = 6;
+  ctx.shadowOffsetX = 2;
+  ctx.shadowOffsetY = 2;
+
+  ctx.fillStyle = item.color;
+  ctx.beginPath();
+  ctx.moveTo(panelX + 16, boxY);
+  ctx.lineTo(panelX + 34, boxY);
+  ctx.quadraticCurveTo(panelX + 40, boxY, panelX + 40, boxY + 6);
+  ctx.lineTo(panelX + 40, boxY + 18);
+  ctx.quadraticCurveTo(panelX + 40, boxY + 24, panelX + 34, boxY + 24);
+  ctx.lineTo(panelX + 16, boxY + 24);
+  ctx.quadraticCurveTo(panelX + 10, boxY + 24, panelX + 10, boxY + 18);
+  ctx.lineTo(panelX + 10, boxY + 6);
+  ctx.quadraticCurveTo(panelX + 10, boxY, panelX + 16, boxY);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  ctx.fillStyle = 'black';
+  ctx.font = '12px Arial';
+  ctx.fillText(item.label, panelX + 60, boxY + 18);
+});
+
+
+// --- Request Drop at Future Stop ---
+if (passengersOnBoard > 0 && !pendingDropRequest) {
+  pendingDropRequest = true;
+  nextStopRequest = stops.find(stop => stop.x > bus.x && !stop.collected);
+}
+
+// --- Highlight Requested Stop ---
+if (pendingDropRequest && nextStopRequest) {
+  const screenX = nextStopRequest.x - camX;
+  ctx.beginPath();
+  ctx.arc(screenX, window.innerHeight * 0.5, STOP_RADIUS + 10, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 220, 0, 0.6)';
+  ctx.fill();
+}
+
+if (flashAlpha > 0) {
+  ctx.save();
+  ctx.fillStyle = `rgba(255, 0, 0, ${flashAlpha})`;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+
+  flashAlpha -= 0.1; // Decrease transparency
+  if (flashAlpha < 0) flashAlpha = 0;
+}
+
+drawTrains(ctx);
+
+}
+drawBus()
+  // Listen for keys to switch bus
+  window.addEventListener('keydown', e => {
+    if (e.key === '1') {
+      currentBusIndex = 0;
+      info.textContent = "Current: Gillig 29'";
+      currentSystem === "A"
+      acceleration = 0.011
+      drawBus();
+    } else if (e.key === '2') {
+      currentBusIndex = 1;
+      info.textContent = "Current: Gillig 40 HEV'";
+      currentSystem === "C"
+      acceleration = 0.1
+      drawBus();
+    } else if (e.key === '3') {
+      currentBusIndex = 2;
+      info.textContent = "Current: New Flyer Xcelsior 40'";
+      currentSystem === "B"
+      acceleration = 0.011
+      drawBus();
+    }
+  });
+  let highFriction = false;
+function drawBackDoors(bus) {
+  if (!bus.backDoorPositions) return;
+
+  bus.backDoorPositions.forEach(doorX => {
+    const x = bus.x - camX + doorX;
+    const y = bus.y + 40;
+    const doorW = bus.doorSize.width;
+    const doorH = bus.doorSize.height;
+
+    // Top Half: Black gradient
+    const topHeight = doorH / 1.5;
+    const topGradient = ctx.createLinearGradient(0, y, 0, y + topHeight);
+    topGradient.addColorStop(0, 'rgba(40, 40, 40, 1)');
+    topGradient.addColorStop(1, 'rgba(40, 40, 40, 1)');
+    ctx.fillStyle = topGradient;
+    ctx.fillRect(x, y, doorW, topHeight);
+
+    // Bottom Half: Darker than bus body
+    const busGradient = ctx.createLinearGradient(
+      bus.x - camX,
+      bus.y + bus.height,
+      bus.x - camX + bus.width,
+      bus.y
+    );
+
+    for (const stop of gradientStops) {
+      busGradient.addColorStop(stop.offset, stop.color);
+    }
+
+    ctx.fillStyle = busGradient;
+    ctx.fillRect(x, y + topHeight, doorW, doorH / 3);
+  });
+
+
+}// ==== GLOBALS ====
+
+let lastTimestamp = performance.now();
+
+
+
+// Signal signs globals
+
+// ==== FUNCTIONS ====
+
+// Traffic Lights Generation and Update (unchanged from before)
+function generateTrafficLights(busX) {
+  const centerIndex = Math.floor(busX / trafficLightSpacing);
+  if (centerIndex === lastCenterIndex) return;
+  lastCenterIndex = centerIndex;
+
+  const newLights = [];
+  for (let i = -Math.floor(lightCount / 2); i <= Math.floor(lightCount / 2); i++) {
+    const lightX = (centerIndex + i) * trafficLightSpacing;
+    let existingLight = trafficLights.find(l => l.x === lightX);
+
+    if (!existingLight) {
+      existingLight = {
+        x: lightX,
+        state: 0,
+        timer: 0,
+        violated: false
+      };
+    }
+    newLights.push(existingLight);
+  }
+  trafficLights = newLights;
+}
+
+function updateTrafficLights(deltaTime) {
+  trafficLights.forEach((light, index) => {
+    const cycleTime = 3000;
+
+    if (light.timer === undefined) {
+      light.timer = (index * 1000) % cycleTime;
+      if (light.timer < 1000) light.state = 0;
+      else if (light.timer < 2000) light.state = 1;
+      else light.state = 2;
+    } else {
+      light.timer += deltaTime;
+    }
+
+    switch (light.state) {
+      case 0:
+        if (light.timer >= 9000) {
+          light.state = 1;
+          light.timer = 0;
+          console.log(`Light ${index} switched to YELLOW`);
+        }
+        break;
+      case 1:
+        if (light.timer >= 1000) {
+          light.state = 2;
+          light.timer = 0;
+          console.log(`Light ${index} switched to RED`);
+        }
+        break;
+      case 2:
+        if (light.timer >= 10000) {
+          light.state = 0;
+          light.timer = 0;
+          console.log(`Light ${index} switched to GREEN`);
+        }
+        break;
+    }
+  });
+}
+
+function drawTrafficLights(ctx, camX, canvasWidth) {
+  const y = 520;
+
+  trafficLights.forEach(light => {
+    const x = light.x - camX;
+    if (x < -100 || x > canvasWidth + 100) return;
+
+    const color = lightColors[light.state] || "#00ff00";
+
+    ctx.beginPath();
+    ctx.arc(x, y, lightRadius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
     ctx.fill();
   });
 }
 
-// Call spawn function to generate traffic lights at start
-spawnTrafficLights();
-setInterval(updateTrafficLights, 5000);
-function animate() {
-      checkStopKey();
-      checkTiltKey();
-      bus.update();
-      camX += (targetCamX - camX) * 0.1;
-      bus.draw();
-      isBusNearRedLight();
-      updateBusMovement()
-      requestAnimationFrame(animate);
+// Signal signs generation and cleanup
+function updateSignalSigns(bus, canvasWidth) {
+  const busX = bus.x;
 
+  // Remove signs far behind the bus
+  for (let i = signalSigns.length - 1; i >= 0; i--) {
+    if (signalSigns[i].x < busX - 300) {
+      signalSigns.splice(i, 1);
     }
-animate();
-// Function to calculate UPH
-function calculateUPH(pixelsPerSecond) {
-  const pixelsInOneUnit = 10000; // Number of pixels per unit (based on the given base)
-  const unitsPerHour = 30; // Base units per hour for 10000 pixels per second
+  }
 
-  // Calculate UPH
-  let uph = (pixelsPerSecond * 3600) / pixelsInOneUnit * unitsPerHour;
-  return uph;
+  // Add new signs ahead if fewer than maxSigns
+  while (signalSigns.length < maxSigns) {
+    let nextLight = null;
+    for (let light of trafficLights) {
+      if (light.x > busX + 100) {
+        const hasSign = signalSigns.some(sign => 
+          Math.abs(sign.x - (light.x - 100)) < 10 || 
+          Math.abs(sign.x - (light.x - 2000)) < 10
+        );
+        if (!hasSign) {
+          nextLight = light;
+          break;
+        }
+      }
+    }
+    if (!nextLight) break;
+
+    const possibleOffsets = [500, 1000].filter(offset => 
+      !signalSigns.some(sign => Math.abs(sign.x - (nextLight.x - offset)) < 10)
+    );
+    if (possibleOffsets.length === 0) break;
+
+    const offset = possibleOffsets[Math.floor(Math.random() * possibleOffsets.length)];
+    const signX = nextLight.x - offset;
+
+    if (signX > busX - 1000) {
+      signalSigns.push({ x: signX, distance: offset });
+    } else {
+      break;
+    }
+  }
 }
 
-// Example usage
-let pixelsPerSecond = 10000; // Base speed of 10000 pixels per second
-let uph = calculateUPH(pixelsPerSecond);
-console.log("UPH: " + uph);  // Output: UPH = 30 when traveling 10000 pixels per second
-  </script>
-</body>
-</html>
+// Draw signal signs on canvas
+function drawSignalSigns(ctx, camX, canvasWidth) {
+  const boxColor = "#1abf00";
+  const textColor = "#fff";
+  const boxWidth = 110;
+  const boxHeight = 30;
 
+  signalSigns.forEach(sign => {
+    const x = sign.x - camX;
+    const y = 150;
+
+    if (x < -100 || x > canvasWidth + 100) return;
+
+
+    // Sign box
+    ctx.fillStyle = boxColor;
+    ctx.fillRect(x - boxWidth / 2, y - boxHeight, boxWidth, boxHeight);
+
+    // Text
+    ctx.fillStyle = textColor;
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("NEXT SIGNAL", x, y - boxHeight + 12);
+    ctx.fillText(`${sign.distance}px`, x, y - boxHeight + 25);
+  });
+}
+function showStopHistory() {
+  const history = JSON.parse(localStorage.getItem("stopHistory") || "[]");
+  const display = document.getElementById("stopHistoryDisplay");
+
+  if (!history.length) {
+    display.innerHTML = "<div class='entry empty'>No stop history yet.</div>";
+    return;
+  }
+
+  display.innerHTML = history.map((entry, index) => {
+    const date = new Date(entry.time).toLocaleString();
+    return `
+      <div class="entry">
+        <div class="entry-header">#${index + 1} • ${entry.special ? "Kneeling" : "Standard"}</div>
+        <div class="entry-body">
+          <div><strong>Time:</strong> ${date}</div>
+          <div><strong>Stop Position:</strong> ${entry.x}px</div>
+          <div><strong>Passengers:</strong> +${entry.passengersAdded}, -${entry.passengersDropped}</div>
+          <div><strong>Points:</strong> +${entry.pointsGained}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function checkTrafficLightViolations(bus) {
+  for (let light of trafficLights) {
+    if (light.state === 2) { // Red light
+      const dx = bus.x - light.x;
+
+      if (Math.abs(dx) < 100 && bus.vx > 0.1 && !light.violated) {
+        points -= 10;
+savePoints()
+        console.log("Violation! -10 Points. Points now:", points);
+        light.violated = true;
+
+        // Trigger flash
+        flashAlpha = 1;
+        flashTimer = 10; // Frames to fade out
+      }
+
+      if (Math.abs(dx) > 200) {
+        light.violated = false;
+      }
+    }
+  }
+}
+
+function updateViolationMessage(deltaTime) {
+  if (violationMessageTimer > 0) {
+    violationMessageTimer -= deltaTime;
+    if (violationMessageTimer < 0) violationMessageTimer = 0;
+  }
+}
+
+function drawViolationMessage(ctx) {
+  if (violationMessageTimer > 0) {
+    ctx.fillStyle = "red";
+    ctx.font = "bold 24px Arial";
+    ctx.fillText("TRAFFIC VIOLATION!", 300, 50);
+  }
+}
+
+function animate(timestamp) {
+  const bus = buses[currentBusIndex];
+  const deltaTime = timestamp - lastTimestamp;
+  lastTimestamp = timestamp;
+
+  if (!driverLocked) {
+    if (accelerating) {
+      vx += acceleration;
+      if (vx > maxSpeed) vx = maxSpeed;
+    } else {
+      if (vx < 0.01) {
+        vx = 0;
+        braking = false;
+        if (currentBusIndex === 1) {
+          acceleration = 0.1
+        } else {
+          acceleration = 0.011
+        }
+      }
+      if (braking) {
+        vx *= 0.975;
+      } else {
+        vx *= 0.9999;
+      }
+    }
+  } else {
+    vx = 0;
+  }
+  if (vx > maxSpeed) vx = maxSpeed;
+
+  bus.vx = vx;
+  bus.x += bus.vx;
+  bus.wheelAngle += bus.vx / 30;
+
+  if (Math.abs(camFollowX - bus.x) > 100) {
+    camX = bus.x - 100;
+    delayTimer = 0;
+  } else {
+    delayTimer++;
+    if (delayTimer > 120) {
+      camFollowX = bus.x;
+      camX += (camFollowX - camX) * 0.05;
+    }
+  }
+checkTrainSpawn(bus);
+
+const trainApproaching = trains.some(train =>
+  trainTracks.some(track =>
+    Math.abs(train.worldX - track.x) < 100
+  )
+);
+generateTrainTrafficLights(bus.x);
+updateTrainTrafficLights(deltaTime);
+
+generateTracksUpTo(bus.x + 100000); // Generate tracks 100k ahead of bus
+checkTrainSpawn(bus);
+
+updateTrainTrafficLights(deltaTime);
+if (isTrainLightBlocking(bus.x)) {
+      vx = 0
+          acceleration = 0
+    accelerating = false
+    acceleration = 0
+    braking = true
+    friction = 0.01
+    vx = 0
+}
+
+  generateTrafficLights(bus.x);
+  updateTrafficLights(deltaTime);
+  updateSignalSigns(bus, ctx.canvas.width);
+  drawMinimap(bus, camX);
+
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  drawBus();
+  drawTrafficLights(ctx, camX, ctx.canvas.width);
+  drawSignalSigns(ctx, camX, ctx.canvas.width);
+
+  checkTrafficLightViolations(bus);
+  updateViolationMessage(deltaTime);
+  drawViolationMessage(ctx);
+
+  if (braking) {accelerating = false;
+  }
+  document.getElementById("pointsDisplay").innerText = "Points: " + points;
+
+  requestAnimationFrame(animate);
+}
+
+// Start animation
+animate();
+</script>
