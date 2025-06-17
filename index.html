@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stopped Go 2.0</title>
+  <title>Bus Visual Canvas - Multiple Buses</title>
   <style>
     body {
       margin: 0;
@@ -278,7 +278,7 @@ button:active {
 }
 #quickKeyboard {
   position: fixed;
-  bottom: -80px;
+  bottom: -70px;
   left: 50%;
   transform: translateX(-50%);
   display: flex;
@@ -307,12 +307,15 @@ button:active {
   text-align: center;
   min-width: 60px;
 }
-
+.row {
+  margin-top: 8px;
+}
   </style>
 </head>
 <body>
   <div id="app">
     <div id="controls">
+      <div id="fpsCounter">FPS: 0</div>
       <div id="pointsDisplay">Points: 0</div>
       <div id="speedDistance">Distance: 0 px<br>Speed: 0 px/s</div>
       <div id="vxDisplay" style="display: none">vx: 0</div>
@@ -347,19 +350,32 @@ button:active {
 
     <canvas id="busCanvas" width="800" height="600"></canvas>
           <pre id="stopHistoryDisplay"></pre>
-          <div id="quickKeyboard">
+<div id="quickKeyboard">
   <button data-key="1">1</button>
   <button data-key="2">2</button>
   <button data-key="3">3</button>
   <button data-key="ArrowRight">→</button>
-  <button data-key="b">B</button>
-  <button data-key="l">L</button>
+  <button data-key="b">Brake</button>
+  <button data-key="l">Kneel</button>
+
+  <br>
+
+  <button data-key="s">Light</button>
+  <button data-key="n">Night</button>
+  <button data-key="t">Test</button>
 </div>
+
 
   </div>
 
   <script>
   const keys = {};
+  let fps = 0;
+let lastFrameTime = performance.now();
+let frames = 0;
+let lastFpsUpdate = performance.now();
+let debugMode = false;
+
   let accelerating = false;
   let braking = false;
   let friction = 0.9999;
@@ -375,7 +391,8 @@ button:active {
     const key = e.key.toLowerCase();
     keys[key] = false;
   });
-
+let spotlightOn = false
+let night = true;  // toggle this to switch modes
   function handleKeyPress(key) {
     if (key === 'arrowright') {
       accelerating = !accelerating;
@@ -387,6 +404,17 @@ button:active {
     if (key === 'b') {
       braking = true;
       console.log('Braking:', braking);
+    }
+    if (key === 't') {
+      debugMode = !debugMode
+    }
+      if (key === 'n') {
+      night = !night
+    }
+        if (key === 's') {
+      if (night) {
+        spotlightOn = !spotlightOn
+      }
     }
   }
 function simulateKeyPress(key) {
@@ -423,6 +451,23 @@ document.querySelectorAll('#quickKeyboard button').forEach(button => {
     }
   });
 });
+const fpsDiv = document.getElementById('fpsCounter');
+
+function gameLoop(timestamp) {
+  const delta = timestamp - lastFrameTime;
+  lastFrameTime = timestamp;
+  frames++;
+
+  if (timestamp - lastFpsUpdate >= 500) {
+    fps = Math.round((frames * 1000) / (timestamp - lastFpsUpdate));
+    frames = 0;
+    lastFpsUpdate = timestamp;
+    if (fpsDiv) fpsDiv.textContent = `FPS: ${fps}`;
+  }
+  requestAnimationFrame(gameLoop);
+}
+
+requestAnimationFrame(gameLoop);
 
   // === Simulate virtual keypress from quick keyboard buttons ===
   document.querySelectorAll('#quickKeyboard button').forEach(button => {
@@ -449,6 +494,13 @@ document.querySelectorAll('#quickKeyboard button').forEach(button => {
 
   openBtn.onclick = () => gradientPopup.classList.add("show");
   closeBtn.onclick = () => gradientPopup.classList.remove("show");
+
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 't') {
+    debugMode = !debugMode;
+    console.log(`Debug mode: ${debugMode ? 'ON' : 'OFF'}`);
+  }
+});
 
   // Optional: Close on background click
   gradientPopup.onclick = (e) => {
@@ -986,6 +1038,45 @@ function updateAudioSystemC() {
   }
 }
 
+function updateTrafficLights(deltaTime) {
+  trafficLights.forEach((light, index) => {
+    const cycleTime = 3000;
+
+    if (light.timer === undefined) {
+      light.timer = (index * 1000) % cycleTime;
+      if (light.timer < 1000) light.state = 0;
+      else if (light.timer < 2000) light.state = 1;
+      else light.state = 2;
+    } else {
+      light.timer += deltaTime;
+    }
+
+    switch (light.state) {
+      case 0:
+        if (light.timer >= 9000) {
+          light.state = 1;
+          light.timer = 0;
+          console.log(`Light ${index} switched to YELLOW`);
+        }
+        break;
+      case 1:
+        if (light.timer >= 1000) {
+          light.state = 2;
+          light.timer = 0;
+          console.log(`Light ${index} switched to RED`);
+        }
+        break;
+      case 2:
+        if (light.timer >= 10000) {
+          light.state = 0;
+          light.timer = 0;
+          console.log(`Light ${index} switched to GREEN`);
+        }
+        break;
+    }
+  });
+}
+
 
 function animate2() {
   updateAudioSystemC();
@@ -1092,14 +1183,16 @@ let showNotice = false;
 let distance = 3000; // define outside loop
 function generateStops() {
   stops = [];
-  for (let x = 10000; x <= STOP_SPAWN_LIMIT; x += STOP_INTERVAL) {
+  for (let i = 0, x = 10000; x <= STOP_SPAWN_LIMIT; x += STOP_INTERVAL, i++) {
     stops.push({
-      x: x,
+      x,
       collected: false,
-      special: Math.random() < 0.5 // 50% chance for special stop
+      special: Math.random() < 0.5,
+      isStation: i % 10 === 0  // Every 10th stop becomes a station
     });
   }
 }
+
 generateStops(); // Initialize stops
 
   let currentBusIndex = 0;
@@ -1243,6 +1336,31 @@ function drawTrains(ctx, camX) {
     ctx.fill();
   }
 }
+function drawTransitStation(ctx, x, camX) {
+  const screenX = x - camX;
+  const buildingWidth = 1000;
+  const buildingHeight = 900;
+  const baseY = canvas.height - buildingHeight + 1100;
+
+  // Main building
+  ctx.fillStyle = '#666';
+  ctx.fillRect(screenX, baseY, buildingWidth, buildingHeight);
+
+  // Dark gray brick base
+  ctx.fillStyle = '#444';
+  ctx.fillRect(screenX, baseY + buildingHeight - 30, buildingWidth, 30);
+
+  // Optional: Add windows
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  for (let i = 0; i < 5; i++) {
+    ctx.fillRect(screenX + 40 + i * 100, baseY + 20, 40, 60);
+  }
+
+  // Optional: Add sign
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px sans-serif';
+  ctx.fillText('TRANSIT STATION', screenX + 20, baseY + 5);
+}
 
 // === TRACK DRAWING ===
 function drawTracks(ctx, camX) {
@@ -1335,7 +1453,7 @@ function isTrainLightBlocking(busX) {
     {
       name: "Gillig 29'",
       x: 200,
-      y: 300,
+      y: 330,
       width: 450,   // slightly shorter than before (was 400)
       height: 180,
       wheelAngle: 0.1,
@@ -1349,7 +1467,7 @@ function isTrainLightBlocking(busX) {
     {
       name: "Gillig 40'",
       x: 200,
-      y: 300,
+      y: 330,
       width: 470,
       height: 180,
       wheelAngle: 0.1,
@@ -1364,7 +1482,7 @@ function isTrainLightBlocking(busX) {
     {
       name: "New Flyer Xcelsior 40'",
       x: 200,
-      y: 300,
+      y: 330,
       width: 500,
       height: 180,
       wheelAngle: 0.1,
@@ -1444,6 +1562,42 @@ endColorPicker.addEventListener('input', (e) => {
 
 // In your draw function, use gradientStops like this:
 
+function generateTrafficLights(busX, intersection = null) {
+  let centerX;
+
+  if (intersection && typeof intersection.x === 'number') {
+    centerX = intersection.x;
+  } else if (typeof busX === 'number') {
+    centerX = busX;
+  } else {
+    // fallback or error handling
+    console.warn('generateTrafficLights: invalid busX and no intersection given');
+    return;
+  }
+
+  // Calculate centerIndex as integer grid index based on position
+  const centerIndex = Math.floor(centerX / trafficLightSpacing);
+
+  if (centerIndex === lastCenterIndex) return;
+  lastCenterIndex = centerIndex;
+
+  const newLights = [];
+  for (let i = -Math.floor(lightCount / 2); i <= Math.floor(lightCount / 2); i++) {
+    const lightX = (centerIndex + i) * trafficLightSpacing;
+    let existingLight = trafficLights.find(l => l.x === lightX);
+
+    if (!existingLight) {
+      existingLight = {
+        x: lightX,
+        state: 0,
+        timer: 0,
+        violated: false
+      };
+    }
+    newLights.push(existingLight);
+  }
+  trafficLights = newLights;
+}
 
 
 window.addEventListener('keydown', e => {
@@ -1500,33 +1654,533 @@ document.getElementById('importGradientFile').addEventListener('change', functio
   reader.readAsText(file);
 });
 saveGradientStops()
+const backgroundLayers = [
+  { speed: 0.1, objects: [], type: 'cloud' },
+  { speed: 0.2, objects: [], type: 'building' },
+  { speed: 0.4, objects: [], type: 'tree' },
+  { speed: 0.8, objects: [], type: 'car' }
+];
 
-function drawBus() {
+const brightBackdropColors = [
+  '#FF3B3B', '#FF9B00', '#FFEB3B', '#8BC34A', '#00BCD4', '#3F51B5', '#9C27B0', '#E91E63',
+  '#FFC107', '#4CAF50', '#00E5FF', '#673AB7', '#F44336', '#CDDC39', '#2196F3', '#FF9800'
+];
 
-const baseBus = buses[currentBusIndex];
-const bus = { ...baseBus }; // Clone so we can adjust Y
-if (vx === 0) {
-bus.y += isLowered ? LOWER_OFFSET : 0;
+// Named buildings limited to 20 with 5 variants each
+const namedBuildings = [
+  'Post Office', 'Library', 'Supermarket', 'Bakery', 'Cafe', 'Cinema', 'Museum', 'Clinic',
+  'Gym', 'Fire Station', 'Police Station', 'Bank', 'Fast Food', 'Pharmacy', 'Bookstore',
+  'Hotel', 'Apartments', 'Office Tower', 'Gas Station', 'Court House'
+];
+
+// Fonts for each building name type (change as needed)
+const buildingFonts = {
+  'Post Office': 'italic 18px serif',
+  'Library': 'bold 18px "Georgia", serif',
+  'Supermarket': 'bold 16px "Arial Black", sans-serif',
+  'Bakery': 'italic 16px "Comic Sans MS", cursive',
+  'Cafe': 'bold 16px "Lucida Handwriting", cursive',
+  'Cinema': 'bold 18px "Impact", sans-serif',
+  'Museum': 'italic 18px "Times New Roman", serif',
+  'Clinic': 'bold 18px "Trebuchet MS", sans-serif',
+  'Gym': 'bold 20px "Verdana", sans-serif',
+  'Fire Station': 'bold 18px "Tahoma", sans-serif',
+  'Police Station': 'bold 18px "Courier New", monospace',
+  'Bank': 'bold 20px "Georgia", serif',
+  'Fast Food': 'bold 18px "Arial Black", sans-serif',
+  'Pharmacy': 'italic 16px "Palatino", serif',
+  'Bookstore': 'italic 18px "Georgia", serif',
+  'Hotel': 'bold 18px "Lucida Bright", serif',
+  'Apartments': 'bold 16px "Arial", sans-serif',
+  'Office Tower': 'bold 18px "Helvetica", sans-serif',
+  'Gas Station': 'bold 18px "Verdana", sans-serif',
+  'Court House': 'bold 20px "Times New Roman", serif',
+};
+
+// Utility function to draw pillars (used for Court House, Bank, etc.)
+function drawPillars(ctx, x, y, width, height, count) {
+  const pillarWidth = width / (count * 2);
+  const pillarHeight = height * 0.7;
+  ctx.fillStyle = '#CCC';
+  for (let i = 0; i < count; i++) {
+    const px = x + i * pillarWidth * 2 + pillarWidth / 2;
+    ctx.fillRect(px, y + height - pillarHeight, pillarWidth, pillarHeight);
+    // Pillar top
+    ctx.fillRect(px - 5, y + height - pillarHeight - 10, pillarWidth + 10, 10);
+  }
 }
-  // Keyboard events
-  window.addEventListener('keydown', e => keys[e.key] = true);
-  window.addEventListener('keyup', e => keys[e.key] = false);
+
+// Icon drawing for specific building types (simple vector shapes)
+
+function drawBookIcon(ctx, x, y, size) {
+  ctx.fillStyle = '#7B3F00';
+  ctx.fillRect(x, y, size * 0.7, size);
+  ctx.fillStyle = '#A0522D';
+  ctx.fillRect(x + size * 0.7, y + size * 0.1, size * 0.1, size * 0.8);
+}
+
+function drawBakeryDisplay(ctx, x, y, width, height) {
+  ctx.fillStyle = '#FFDAB9';
+  ctx.fillRect(x, y + height * 0.7, width, height * 0.3);
+  ctx.fillStyle = '#F4A460';
+  for (let i = 0; i < 3; i++) {
+    ctx.beginPath();
+    ctx.ellipse(x + width * (0.2 + i * 0.3), y + height * 0.85, width * 0.07, height * 0.1, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawPillarRoof(ctx, x, y, width) {
+  ctx.fillStyle = '#BBB';
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width / 2, y - 30);
+  ctx.lineTo(x + width, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawBuildingName(ctx, name, x, y, width, align = 'center') {
+  ctx.fillStyle = '#FFF';
+  ctx.textBaseline = 'top';
+  ctx.font = buildingFonts[name] || '16px sans-serif';
+  ctx.textAlign = align;
+  if (align === 'center') {
+    ctx.fillText(name, x + width / 2, y);
+  } else if (align === 'left') {
+    ctx.fillText(name, x + 5, y);
+  }
+}
+
+// Now the main drawing function for buildings including variants and decorations
+
+function drawNamedBuilding(ctx, obj, time) {
+  const { x, y, width, height, name, variant } = obj;
+  const screenX = x - camX * 0.2;
+
+  // Base colors & gradients for variants (adjust to taste)
+  const baseColors = [
+    '#2C3E50', '#34495E', '#7F8C8D', '#95A5A6', '#BDC3C7'
+  ];
+  const baseColor = baseColors[variant % baseColors.length];
+
+  // Draw building base
+  const grad = ctx.createLinearGradient(0, y, 0, y + height);
+  grad.addColorStop(0, baseColor);
+  grad.addColorStop(1, '#000');
+  ctx.fillStyle = grad;
+  ctx.fillRect(screenX, y, width, height);
+
+  // Mono large window if applicable (some buildings have no windows)
+  const windowMargin = 20;
+  const windowWidth = width - windowMargin * 2;
+  const windowHeight = height * 0.6;
+  const windowY = y + height * 0.25;
+
+  // Draw windows only on specific types
+  if (['Library', 'Supermarket', 'Bakery', 'Cafe', 'Cinema', 'Museum', 'Clinic', 'Gym', 'Bank', 'Bookstore', 'Hotel', 'Office Tower'].includes(name)) {
+    // Mono window with gradient
+    const windowGrad = ctx.createLinearGradient(0, windowY, 0, windowY + windowHeight);
+    windowGrad.addColorStop(0, 'rgba(255,255,255,0.4)');
+    windowGrad.addColorStop(1, 'rgba(200, 200, 255, 0.1)');
+    ctx.fillStyle = windowGrad;
+    ctx.fillRect(screenX + windowMargin, windowY, windowWidth, windowHeight);
+  }
+
+  // Draw building specific decoration by name and variant
+  switch (name) {
+    case 'Library':
+      // Draw a book icon on wall
+      drawBookIcon(ctx, screenX + width / 2 - 20, y + height * 0.15, 40);
+      drawBuildingName(ctx, name, screenX, y + 5, width, 'center');
+      break;
+
+    case 'Bakery':
+      drawBakeryDisplay(ctx, screenX + 10, y + height * 0.65, width * 0.8, height * 0.25);
+      drawBuildingName(ctx, name, screenX + 5, y + 5, width, 'left');
+      break;
+
+    case 'Court House':
+      drawPillars(ctx, screenX + width * 0.15, y, width * 0.7, height, 6);
+      drawPillarRoof(ctx, y, y, width);
+      drawBuildingName(ctx, name, screenX + 5, y + 5, width, 'left');
+      break;
+
+    case 'Bank':
+      drawPillars(ctx, screenX + width * 0.1, y + height * 0.1, width * 0.8, height * 0.7, 4);
+      drawBuildingName(ctx, name, screenX + width / 2, y + 5, width, 'center');
+      break;
+
+    case 'Post Office':
+      // Use a stripe for the post office
+      ctx.fillStyle = '#003366';
+      ctx.fillRect(screenX, y + height * 0.1, width, height * 0.15);
+      drawBuildingName(ctx, name, screenX + width / 2, y + 5, width, 'center');
+      break;
+
+    default:
+      // Just building name top-left for others
+      drawBuildingName(ctx, name, screenX + 5, y + 5, width, 'left');
+      break;
+  }
+}
+const intersections = [];
+const canvasWidth = 800; // example, adjust as needed
+const canvasHeight = 600;
+const mainRoadY = canvasHeight - 100;
+
+// Generate intersections up to some max distance (e.g. 100000 px)
+const maxDistance = 100000;
+let lastX = 0;
+while (lastX < maxDistance) {
+  const gap = 2000 + Math.random() * 3000; // 2000-5000 px gap
+  lastX += gap;
+  intersections.push({
+    x: lastX,
+    hasTrafficLight: Math.random() < 0.2, // 20% chance
+  });
+}
+
+function drawIntersection(ctx, camX, intersection) {
+  const screenX = intersection.x - camX + canvasWidth / 2;
+
+  // Only draw if on screen (roughly)
+  if (screenX < -200 || screenX > canvasWidth + 200) return;
+
+  const buildingWidth = 120;
+  const buildingHeight = 200;
+
+  // Draw perpendicular street (vertical road)
+  ctx.fillStyle = '#444'; // dark asphalt
+  ctx.fillRect(screenX - 50, 0, 100, canvasHeight);
+
+  // Draw building at NE corner (right of vertical road, above main road)
+  const buildingX = screenX + 50;
+  const buildingY = mainRoadY - buildingHeight;
+  ctx.fillStyle = '#a0522d';
+  ctx.fillRect(buildingX, buildingY, buildingWidth, buildingHeight);
+
+  // Windows on building
+  ctx.fillStyle = '#555';
+  const windowSize = 20;
+  for(let y = buildingY + 10; y < buildingY + buildingHeight - 10; y += 40) {
+    for(let x = buildingX + 10; x < buildingX + buildingWidth - 10; x += 40) {
+      ctx.fillRect(x, y, windowSize, windowSize);
+    }
+  }
+
+  // Draw traffic light if this intersection has one
+  if (intersection.hasTrafficLight) {
+    const lightX = buildingX - 40;
+    const lightY = mainRoadY - 70;
+
+    // Pole
+    ctx.fillStyle = '#222';
+    ctx.fillRect(lightX + 12, lightY, 6, 50);
+
+    // Traffic light box
+    ctx.fillStyle = '#000';
+    ctx.fillRect(lightX, lightY - 30, 30, 60);
+
+    // Lights: red, yellow, green
+    const lightRadius = 8;
+    const lightSpacing = 20;
+    const colors = ['red', 'yellow', 'green'];
+    for(let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.fillStyle = colors[i];
+      ctx.arc(lightX + 15, lightY - 20 + i * lightSpacing, lightRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.closePath();
+    }
+  }
+}
+function drawAllIntersections(ctx, camX) {
+  const roadWidth = 350;
+  const mainRoadTop = canvas.height - 140;   // top edge of sidewalk
+  const mainRoadHeight = 140;                // sidewalk + main road total height
+  const sidewalkWidth = 15;
+  const buildingWidth = 80;
+  const buildingHeight = 140;
+
+  // Remove traffic lights for intersections too far from camX (>500px)
+  trafficLights = trafficLights.filter(light => {
+    // Find corresponding intersection
+    const intersection = intersections.find(i => i.x === light.x);
+    if (!intersection) return false; // no intersection found => remove light
+    const dist = Math.abs(intersection.x - camX);
+    return dist <= 500;
+  });
+
+  for (const intersection of intersections) {
+    // Calculate screen position relative to camera
+    const screenX = intersection.x - camX + canvas.width / 2;
+
+    // Draw perpendicular road - vertical rectangle cutting main road + sidewalk
+    ctx.fillStyle = '#333';  // same as main road color
+    ctx.fillRect(screenX - roadWidth / 2, mainRoadTop, roadWidth, mainRoadHeight);
+
+  }
+}
+// Helper function to draw a traffic light at (x, y)
+function drawTrafficLight(ctx, x, y) {
+  const lightWidth = 20;
+  const lightHeight = 60;
+  ctx.fillStyle = '#222';
+  ctx.fillRect(x - lightWidth / 2, y - lightHeight, lightWidth, lightHeight);
+
+  // Lights: red, yellow, green circles
+  const radius = 6;
+  const spacing = 20;
+  const colors = ['red', 'yellow', 'green'];
+  for (let i = 0; i < colors.length; i++) {
+    ctx.beginPath();
+    ctx.fillStyle = colors[i];
+    ctx.arc(x, y - lightHeight + spacing * (i + 1), radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+// Modified main draw function to include named buildings variants
+
+function drawParallaxLayers(ctx, camX, time = 0) {
+  backgroundLayers.forEach(layer => {
+    layer.objects.forEach(obj => {
+      const screenX = obj.x - camX * layer.speed;
+      if (screenX + obj.width < -500 || screenX > canvas.width + 500) return;
+
+      const fogOpacity = 0.1 + layer.speed * 0.3;
+
+      if (obj.type === 'cloud') {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.ellipse(screenX, obj.y, obj.width / 2, obj.height / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (obj.type === 'building') {
+        if (obj.name) {
+          drawNamedBuilding(ctx, obj, time);
+        } else if (obj.bType === 'fullGlass') {
+          const bg = brightBackdropColors[obj.variant % brightBackdropColors.length];
+          ctx.fillStyle = bg;
+          ctx.fillRect(screenX, obj.y, obj.width, obj.height);
+
+          ctx.fillStyle = `rgba(255,255,255,0.5)`;
+          ctx.fillRect(screenX, obj.y, obj.width, obj.height);
+        } else if (obj.bType === 'brand') {
+          ctx.fillStyle = '#654321';
+          ctx.fillRect(screenX, obj.y, obj.width, obj.height);
+          ctx.fillStyle = '#00FFFF';
+          ctx.fillRect(screenX, obj.y + obj.height / 2 - 10, obj.width, 20);
+        } else {
+          // Generic building gradient
+          const grad = ctx.createLinearGradient(0, obj.y, 0, obj.y + obj.height);
+          grad.addColorStop(0, '#222');
+          grad.addColorStop(1, '#111');
+          ctx.fillStyle = grad;
+          ctx.fillRect(screenX, obj.y, obj.width, obj.height);
+        }
+
+        // Universal shadow overlay for depth
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.fillRect(screenX + obj.width * 0.1, obj.y + obj.height * 0.1, obj.width * 0.8, obj.height * 0.8);
+
+        // Optional building name for unnamed types - skipped here
+
+        ctx.fillStyle = `rgba(255,255,255,${fogOpacity})`;
+        ctx.fillRect(screenX, obj.y, obj.width, obj.height);
+      }
+
+      if (obj.type === 'tree') {
+        ctx.fillStyle = '#5A3A1E';
+        ctx.fillRect(screenX + obj.width / 2 - 24, 320, 40, 150);
+        const foliageColor = obj.variant === 'special' ? '#66FFC4' : '#3FA';
+        ctx.fillStyle = foliageColor;
+        ctx.beginPath();
+        ctx.arc(screenX + obj.width / 2, 330, obj.width * 0.90, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      if (obj.type === 'car') {
+        ctx.fillStyle = '#222';
+        ctx.fillRect(screenX, obj.y, obj.width, 20);
+        ctx.fillStyle = '#000';
+        ctx.beginPath();
+        ctx.arc(screenX + 10, obj.y + 20, 5, 0, Math.PI * 2);
+        ctx.arc(screenX + obj.width - 10, obj.y + 20, 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  });
+}
+
+// Generate objects remains mostly the same, with named buildings assigned
+function generateParallaxObjects() {
+  const groundY = canvas.height - 160;
+
+  backgroundLayers.forEach(layer => {
+    layer.objects = [];
+
+    for (let i = 0; i < 100; i++) {
+      const x = i * 600 + Math.random() * 200;
+      let y = 0, width = 0, height = 0, variant = 0, name = '', type = 'normal';
+
+      if (layer.type === 'building') {
+        variant = i;
+        width = 100 + Math.random() * 300;
+        height = 180 + Math.random() * 320;
+        y = canvas.height - 140 - height;
+
+        if (Math.random() < 0.15) {  // Reduced chance for named buildings
+          name = namedBuildings[Math.floor(Math.random() * namedBuildings.length)];
+        }
+        if (Math.random() < 0.2) type = 'fullGlass';
+        if (Math.random() < 0.1) type = 'brand';
+
+        layer.objects.push({ x, y, width, height, type: layer.type, variant, bType: type, name });
+        continue;
+      }
+
+      if (layer.type === 'tree') {
+        variant = i % 20 === 0 ? 'special' : Math.floor(Math.random() * 6);
+        width = 100 + Math.random() * 30;
+        height = 180 + Math.random() * 40;
+        y = groundY - height;
+      }
+
+      if (layer.type === 'car') {
+        width = 70 + Math.random() * 40;
+        height = 25;
+        y = canvas.height - 100 - height;
+      }
+
+      if (layer.type === 'cloud') {
+        width = 120 + Math.random() * 100;
+        height = 50;
+        y = Math.random() * 200 + 40;
+      }
+
+      layer.objects.push({ x, y, width, height, type: layer.type, variant });
+    }
+  });
+}
+
+generateParallaxObjects();
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 'n') {
+    night = !night;
+  }
+});
+
+// Toggle spotlight on/off when pressing 'S'
+window.addEventListener('keydown', (e) => {
+  if (e.key.toLowerCase() === 's') {
+    if (night) {
+    spotlightOn = !spotlightOn;
+  }}
+});
+function drawBus() {
+  const skygradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+  if (night) {
+    skygradient.addColorStop(0, '#0b0c17');  // very dark blue/black
+    skygradient.addColorStop(1, '#000000');  // black
+  } else {
+    skygradient.addColorStop(0, '#87ceeb');  // day sky blue
+    skygradient.addColorStop(1, '#b0e0e6');  // lighter blue
+  }
+
+
+  const baseBus = buses[currentBusIndex];
+  const bus = { ...baseBus };
+  if (vx === 0) {
+    bus.y += isLowered ? LOWER_OFFSET : 0;
+  }
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-ctx.shadowBlur = 10;
-ctx.shadowOffsetX = 4;
-ctx.shadowOffsetY = 4;
 
-// Sky background
-ctx.fillStyle = '#87CEEB'; // light blue
-ctx.fillRect(0, 0, canvas.width, canvas.height);
+ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+ctx.shadowBlur = 12;
 
-// Road under bus
-ctx.fillStyle = '#333'; // dark gray road
+  // Sky
+  ctx.fillStyle = skygradient;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  // Parallax Background
+  drawParallaxLayers(ctx, camX);
+// 1. Sidewalk (opposite side)
+ctx.fillStyle = '#bbb';
+ctx.fillRect(0, canvas.height - 140, canvas.width, 40);
+
+// 2. Perpendicular roads cutting into sidewalk
+// 3. Main horizontal road (on top of sidewalk & perp roads)
+ctx.fillStyle = '#333';
 ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-drawSignalSigns(ctx, camX, canvas.width);
 
+ctx.strokeStyle = '#FFD700';
+ctx.lineWidth = 4;
+
+ctx.beginPath();
+ctx.moveTo(0, canvas.height - 85);
+ctx.lineTo(canvas.width, canvas.height - 85);
+ctx.stroke();
+
+drawAllIntersections(ctx, camX, bus);  // this should draw the perpendicular roads and buildings
+
+// Parameters for highway curve
+const highway = {
+  baseY: canvas.height - 600,  // vertical position of highway deck
+  width: 300,                  // bridge width
+  deckHeight: 50,
+  baseColor: '#008B8B',        // dark cyan base under road
+  deckColor: '#D6BDA3',        // lighter brown deck top
+  pillarWidth: 20,
+  pillarHeight: 150,
+  pillarSpacing: 120,          // distance between pillars along highway
+  curveAmplitude: 100,         // horizontal curve amplitude
+  curveFrequency: 0.0025,      // curve frequency
+  zLayers: 3                   // number of layered decks
+};
+
+// Draw highway function, called after drawing bus to overlay it
+function drawCurvingHighway(ctx, busX, time) {
+  // We'll draw 3 decks stacked with vertical offsets
+  for (let layer = 0; layer < highway.zLayers; layer++) {
+    const verticalOffset = layer * (highway.deckHeight + 20); // space between decks
+
+    // Draw bridge deck (top)
+    // Curve horizontally using sine wave for smooth left-right
+    const curveX = x => x + Math.sin(x * highway.curveFrequency + time * 0.002 + layer) * highway.curveAmplitude;
+
+    // Draw highway segments spaced horizontally, centered on bus
+    // We draw a range around busX so highway covers canvas width + margin
+    const startX = busX - canvas.width / 2 - 500;
+    const endX = busX + canvas.width / 2 + 500;
+
+    // Draw base and deck in segments for smooth curve
+    for (let x = startX; x < endX; x += highway.width) {
+      const cx = curveX(x);
+
+      // Base under road (dark cyan)
+      ctx.fillStyle = highway.baseColor;
+      ctx.fillRect(cx - highway.width / 2, highway.baseY - verticalOffset, highway.width, 30);
+
+      // Deck (lighter brown)
+      ctx.fillStyle = highway.deckColor;
+      ctx.fillRect(cx - highway.width / 2 - 10, highway.baseY - verticalOffset - highway.deckHeight, highway.width + 20, highway.deckHeight);
+
+      // Draw pillars under deck
+      const pillarCount = Math.floor(highway.width / highway.pillarSpacing) + 1;
+      ctx.fillStyle = '#654321'; // dark brown pillars
+      for (let p = 0; p < pillarCount; p++) {
+        const pillarX = cx - highway.width / 2 + p * highway.pillarSpacing;
+        ctx.fillRect(pillarX, highway.baseY - verticalOffset + 30, highway.pillarWidth, highway.pillarHeight);
+      }
+    }
+  }
+}
+
+  // Draw signal signs
+  drawSignalSigns(ctx, camX, canvas.width);
 // Draw bridge columns and bridge structure
 for (const bridge of bridges) {
   const screenX = bridge.x - bus.x + canvas.width / 2;
@@ -1815,6 +2469,8 @@ drawBackDoors(bus);
   drawWindow(bus.window);
   drawWindow(bus.window2);
 
+
+
   // --- Fuel Pickups ---
   fuelPickups.forEach(pickup => {
     if (!pickup.collected) {
@@ -1863,7 +2519,11 @@ ctx.restore();
 
   });
 
-
+  for (const stop of stops) {
+  if (stop.isStation && stop.x > bus.x - 2000) {
+    drawTransitStation(ctx, stop.x, camX);
+  }
+}
 for (const bridge of bridges) {
   const screenX = bridge.x - bus.x + canvas.width / 2;
   
@@ -2091,6 +2751,67 @@ if (flashAlpha > 0) {
 }
 
 drawTrains(ctx);
+  if (night && !spotlightOn) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.99)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+if (spotlightOn) {
+  // Dark overlay over whole canvas (more opaque)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.92)';  // dark shadow over everything
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // Create a linear gradient for the spotlight light cone
+  const busScreenX = bus.x - camX + canvas.width / 2 + 50; 
+  const busScreenY = 430
+
+  const coneLength = 500;
+  const coneBaseWidth = 1200;
+  const coneTipWidth = 10;
+
+  // Create gradient along the cone's axis
+  let gradient = ctx.createLinearGradient(busScreenX, busScreenY, busScreenX + coneLength, busScreenY);
+
+  // Gradient stops - from almost transparent light to full shadow
+  gradient.addColorStop(0, 'rgba(0,0,0,0)');    // fully transparent at the tip of bus
+  gradient.addColorStop(0.2, 'rgba(127,127,127,0.1)');
+  gradient.addColorStop(0.6, 'rgba(255,255,255,0.1)');
+  gradient.addColorStop(1, 'rgba(127,127,127,0.1)');
+
+  // Save current context and clip to cone shape
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(busScreenX, busScreenY - coneTipWidth / 2);
+  ctx.lineTo(busScreenX + coneLength, busScreenY - coneBaseWidth / 2);
+  ctx.lineTo(busScreenX + coneLength, busScreenY + coneBaseWidth / 2);
+  ctx.lineTo(busScreenX, busScreenY + coneTipWidth / 2);
+  ctx.closePath();
+
+  ctx.clip();
+
+  // Draw the gradient inside the cone shape
+  ctx.fillStyle = gradient;
+  ctx.fillRect(busScreenX, busScreenY - coneBaseWidth / 2, coneLength, coneBaseWidth);
+
+  ctx.restore();
+
+}
+  drawTrafficLights(ctx, camX);  
+  if (debugMode) {
+  ctx.strokeStyle = 'lime';
+  ctx.strokeRect(bus.x - camX, bus.y, bus.width, bus.height);
+}
+if (debugMode) {
+  ctx.fillStyle = 'white';
+  ctx.font = '14px monospace';
+  ctx.fillText(`Bus X: ${bus.x.toFixed(0)}`, 10, 20);
+  ctx.fillText(`Cam X: ${camX.toFixed(0)}`, 10, 40);
+}
+if (debugMode) {
+  stops.forEach(stop => {
+    ctx.fillStyle = stop.special ? 'yellow' : 'orange';
+    ctx.fillRect(stop.x - camX, canvas.height - 110, 10, 10);
+  });
+}
 
 }
 drawBus()
@@ -2162,67 +2883,6 @@ let lastTimestamp = performance.now();
 // ==== FUNCTIONS ====
 
 // Traffic Lights Generation and Update (unchanged from before)
-function generateTrafficLights(busX) {
-  const centerIndex = Math.floor(busX / trafficLightSpacing);
-  if (centerIndex === lastCenterIndex) return;
-  lastCenterIndex = centerIndex;
-
-  const newLights = [];
-  for (let i = -Math.floor(lightCount / 2); i <= Math.floor(lightCount / 2); i++) {
-    const lightX = (centerIndex + i) * trafficLightSpacing;
-    let existingLight = trafficLights.find(l => l.x === lightX);
-
-    if (!existingLight) {
-      existingLight = {
-        x: lightX,
-        state: 0,
-        timer: 0,
-        violated: false
-      };
-    }
-    newLights.push(existingLight);
-  }
-  trafficLights = newLights;
-}
-
-function updateTrafficLights(deltaTime) {
-  trafficLights.forEach((light, index) => {
-    const cycleTime = 3000;
-
-    if (light.timer === undefined) {
-      light.timer = (index * 1000) % cycleTime;
-      if (light.timer < 1000) light.state = 0;
-      else if (light.timer < 2000) light.state = 1;
-      else light.state = 2;
-    } else {
-      light.timer += deltaTime;
-    }
-
-    switch (light.state) {
-      case 0:
-        if (light.timer >= 9000) {
-          light.state = 1;
-          light.timer = 0;
-          console.log(`Light ${index} switched to YELLOW`);
-        }
-        break;
-      case 1:
-        if (light.timer >= 1000) {
-          light.state = 2;
-          light.timer = 0;
-          console.log(`Light ${index} switched to RED`);
-        }
-        break;
-      case 2:
-        if (light.timer >= 10000) {
-          light.state = 0;
-          light.timer = 0;
-          console.log(`Light ${index} switched to GREEN`);
-        }
-        break;
-    }
-  });
-}
 
 function drawTrafficLights(ctx, camX, canvasWidth) {
   const y = 520;
