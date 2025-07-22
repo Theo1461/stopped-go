@@ -2644,7 +2644,7 @@ function updateAIBuses(deltaTime, playerBus) {
     }
 
     // === Extra-early waiting logic ===
-    if (latenessSec > 25 && !bus.earlyHoldApplied) {
+    if (latenessSec > 15 && !bus.earlyHoldApplied) {
       // Find nearest valid stop
       let closestStop = null;
       let closestDist = Infinity;
@@ -2672,8 +2672,7 @@ function updateAIBuses(deltaTime, playerBus) {
         let shouldStop = Math.random() < bus.stopChance;
 
         if (shouldStop) {
-          stop.collected = true;
-          bus.lingerTimer = 300; // always 5 seconds now
+          bus.lingerTimer = 900;
           stoppingNow = true;
           break;
         }
