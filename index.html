@@ -2583,10 +2583,10 @@ function updateAIBuses(deltaTime, playerBus) {
       bus.lingerTimer = 0;
       bus.patienceTimer = 0;
       bus.earlyHoldApplied = false;
-      bus.maxSpeed = 9 + Math.random() * 3; // a bit slower overall
+      bus.maxSpeed = 8 + Math.random() * 3; // a bit slower overall
       bus.cruisingSpeed = IDEAL_SPEED * (0.75 + Math.random() * 0.2); // slightly under target
       bus.reliability = 0.05 + Math.random() * 0.2;
-      bus.stopChance = 0.05; // more likely to stop
+      bus.stopChance = 0.5 //more likely to stop
     }
 
     const distanceToPlayer = playerBus.x - bus.x - 450;
@@ -2651,7 +2651,7 @@ function updateAIBuses(deltaTime, playerBus) {
 
       for (const stop of stops) {
         const dist = Math.abs(bus.x - stop.x);
-        if (!stop.collected && !stop.playerOnly && dist < STOP_DETECTION_RANGE * 1.5 && dist < closestDist) {
+        if (!stop.playerOnly && dist < STOP_DETECTION_RANGE * 1.5 && dist < closestDist) {
           closestDist = dist;
           closestStop = stop;
         }
