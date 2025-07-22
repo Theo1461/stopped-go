@@ -2668,7 +2668,7 @@ function updateAIBuses(deltaTime, playerBus) {
     // === Stop logic ===
     let stoppingNow = false;
     for (const stop of stops) {
-      if (!stop.collected && Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE && !stop.playerOnly) {
+      if (Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE && !stop.playerOnly) {
         let shouldStop = Math.random() < bus.stopChance;
 
         if (shouldStop) {
