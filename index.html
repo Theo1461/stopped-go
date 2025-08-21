@@ -2579,10 +2579,9 @@ function updateAIBuses(deltaTime, playerBus) {
     // Assign bus behavior once
     if (!bus.behavior) {
       const roll = Math.random();
-      if (roll < 0.1) bus.behavior = "alwaysLate";      // 10-20s late
-      else if (roll < 0.2) bus.behavior = "stopper";    // speeds but lingers long
-      else if (roll < 0.3) bus.behavior = "earlyBird";  // tries to be slightly early
-      else if (roll < 0.4) bus.behavior = "lazyCollector"; // stops at all stops
+      if (roll < 0.2) bus.behavior = "alwaysLate";      // 10-20s late
+      else if (roll < 0.5) bus.behavior = "stopper";    // speeds but lingers long
+      else if (roll < 0.8) bus.behavior = "earlyBird";  // tries to be slightly early
       else bus.behavior = "normal";                     // default catch-up
       bus.lingerTimer = 0;
       bus.visitedStops = new Set();
@@ -2596,7 +2595,7 @@ function updateAIBuses(deltaTime, playerBus) {
     if (bus.behavior === "alwaysLate") {
       idealX -= 10000 + Math.random() * 10000; // 10-20 sec late
     } else if (bus.behavior === "earlyBird") {
-      idealX += 3000 + Math.random() * 2000; // 3-5 sec early
+      idealX += 10000 + Math.random() * 2000; // 3-5 sec early
     }
 
     const dx = idealX - bus.x;
@@ -2614,10 +2613,11 @@ function updateAIBuses(deltaTime, playerBus) {
         } else if (bus.behavior === "lazyCollector") {
           bus.lingerTimer = 300 + Math.floor(Math.random() * 300);
         } else if (bus.behavior === "normal" && Math.random() < 0.5) {
-          bus.lingerTimer = 200 + Math.floor(Math.random() * 200);
+          bus.lingerTimer = 500 + Math.floor(Math.random() * 300) ;
         }
         bus.visitedStops.add(stop);
         shouldStop = true;
+        stop.collected = true
         break;
       }
     }
