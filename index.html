@@ -2566,6 +2566,7 @@ const LONG_STOP_PROBABILITY = 0.002; // Probability to start a long stop for Sto
 const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
 const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
 const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after stop
+
 function updateAIBuses(deltaTime, playerBus) {
   const elapsedTime = performance.now() - startTime;
   const logStatuses = [];
@@ -2586,7 +2587,12 @@ function updateAIBuses(deltaTime, playerBus) {
       bus.maxSpeed = 8 + Math.random() * 3; // a bit slower overall
       bus.cruisingSpeed = IDEAL_SPEED * (0.75 + Math.random() * 0.2); // slightly under target
       bus.reliability = 0.05 + Math.random() * 0.2;
-      bus.stopChance = 0.5 //more likely to stop
+      bus.stopChance = 0.5; // more likely to stop
+
+      // Schedule personality
+      bus.scheduleTolerance = 5 + Math.random() * 15;  // how much lateness/earliness tolerated
+      bus.catchupFactor = 0.01 + Math.random() * 0.03; // aggressiveness catching up
+      bus.earlyHoldBias = Math.random();               // likelihood of waiting when early
     }
 
     const distanceToPlayer = playerBus.x - bus.x - 450;
@@ -2639,27 +2645,15 @@ function updateAIBuses(deltaTime, playerBus) {
     const absDx = Math.abs(dx);
     const latenessSec = dx / IDEAL_SPEED;
 
-    if (latenessSec <= 10) {
-      bus.earlyHoldApplied = false; // reset once closer to time
+    // Reset hold once close enough to schedule
+    if (Math.abs(latenessSec) <= bus.scheduleTolerance) {
+      bus.earlyHoldApplied = false;
     }
 
-    // === Extra-early waiting logic ===
-    if (latenessSec > 15 && !bus.earlyHoldApplied) {
-      // Find nearest valid stop
-      let closestStop = null;
-      let closestDist = Infinity;
-
-      for (const stop of stops) {
-        const dist = Math.abs(bus.x - stop.x);
-        if (!stop.playerOnly && dist < STOP_DETECTION_RANGE * 1.5 && dist < closestDist) {
-          closestDist = dist;
-          closestStop = stop;
-        }
-      }
-
-      if (closestStop) {
-        closestStop.collected = true;
-        bus.lingerTimer = 1200; // Wait 20 seconds
+    // If too early → maybe wait
+    if (latenessSec > bus.scheduleTolerance && !bus.earlyHoldApplied) {
+      if (bus.earlyHoldBias > 0.4) { // only some drivers choose to hold
+        bus.lingerTimer = 600 + Math.floor(Math.random() * 600); // 10–20s
         bus.earlyHoldApplied = true;
         continue;
       }
@@ -2670,7 +2664,6 @@ function updateAIBuses(deltaTime, playerBus) {
     for (const stop of stops) {
       if (Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE && !stop.playerOnly) {
         let shouldStop = Math.random() < bus.stopChance;
-
         if (shouldStop) {
           bus.lingerTimer = 900;
           stoppingNow = true;
@@ -2678,7 +2671,6 @@ function updateAIBuses(deltaTime, playerBus) {
         }
       }
     }
-
     if (stoppingNow) {
       bus.vx = 0;
       bus.x += bus.vx;
@@ -2730,6 +2722,18 @@ function updateAIBuses(deltaTime, playerBus) {
       default:
         targetSpeed = IDEAL_SPEED;
     }
+
+    // === Schedule adjustment ===
+    let scheduleSpeedAdjust = 0;
+    if (latenessSec < -bus.scheduleTolerance) {
+      // Late → catch up
+      scheduleSpeedAdjust = Math.min(IDEAL_SPEED * 0.5, -dx * bus.catchupFactor);
+    } else if (latenessSec > bus.scheduleTolerance) {
+      // Early → slow down a bit
+      scheduleSpeedAdjust = -Math.min(IDEAL_SPEED * 0.3, dx * bus.catchupFactor);
+    }
+
+    targetSpeed += scheduleSpeedAdjust;
 
     // Apply randomness and smoothing
     targetSpeed += (Math.random() - 0.5) * 0.2;
