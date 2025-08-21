@@ -2593,9 +2593,9 @@ function updateAIBuses(deltaTime, playerBus) {
 
     // Behavior adjustments
     if (bus.behavior === "alwaysLate") {
-      idealX -= 10000 + Math.random() * 10000; // 10-20 sec late
+      idealX -= 5000 + Math.random() * 10000; // 10-20 sec late
     } else if (bus.behavior === "earlyBird") {
-      idealX += 10000 + Math.random() * 2000; // 3-5 sec early
+      idealX += 5000 + Math.random() * 2000; // 3-5 sec early
     }
 
     const dx = idealX - bus.x;
@@ -2609,11 +2609,11 @@ function updateAIBuses(deltaTime, playerBus) {
       const distToStop = Math.abs(bus.x - stop.x);
       if (!bus.visitedStops.has(stop) && distToStop < 50) {
         if (bus.behavior === "stopper") {
-          bus.lingerTimer = 600 + Math.floor(Math.random() * 600); // 10-20 sec linger
+          bus.lingerTimer = 300 + Math.floor(Math.random() *300) //10-20 sec linger
         } else if (bus.behavior === "lazyCollector") {
-          bus.lingerTimer = 300 + Math.floor(Math.random() * 300);
+          bus.lingerTimer = 200 + Math.floor(Math.random() * 300);
         } else if (bus.behavior === "normal" && Math.random() < 0.5) {
-          bus.lingerTimer = 500 + Math.floor(Math.random() * 300) ;
+          bus.lingerTimer = 200 + Math.floor(Math.random() * 200) ;
         }
         bus.visitedStops.add(stop);
         shouldStop = true;
