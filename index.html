@@ -2569,191 +2569,53 @@ const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after sto
 
 function updateAIBuses(deltaTime, playerBus) {
   const elapsedTime = performance.now() - startTime;
-  const logStatuses = [];
 
   for (const bus of aiBuses) {
-    if (!bus.personality) {
-      const rand = Math.random();
-      if (rand < 0.3) bus.personality = "cruiser";
-      else if (rand < 0.6) bus.personality = "stopGo";
-      else if (rand < 0.8) bus.personality = "steady";
-      else if (rand < 0.9) bus.personality = "nervous";
-      else bus.personality = "skipper";
-
-      bus.modeTimer = 0;
-      bus.lingerTimer = 0;
-      bus.patienceTimer = 0;
-      bus.earlyHoldApplied = false;
-      bus.maxSpeed = 8 + Math.random() * 3; // a bit slower overall
-      bus.cruisingSpeed = IDEAL_SPEED * (0.75 + Math.random() * 0.2); // slightly under target
-      bus.reliability = 0.05 + Math.random() * 0.2;
-      bus.stopChance = 0.5; // more likely to stop
-
-      // Schedule personality
-      bus.scheduleTolerance = 5 + Math.random() * 15;  // how much lateness/earliness tolerated
-      bus.catchupFactor = 0.01 + Math.random() * 0.03; // aggressiveness catching up
-      bus.earlyHoldBias = Math.random();               // likelihood of waiting when early
-    }
-
-    const distanceToPlayer = playerBus.x - bus.x - 450;
-
-    // === Handle lingering ===
-    if (bus.lingerTimer > 0) {
-      bus.vx = 0;
-      bus.lingerTimer--;
-      bus.x += bus.vx;
-      continue;
-    }
-
-    // === Random breakdowns ===
-    if (Math.random() > bus.reliability && Math.random() < 0.001) {
-      bus.lingerTimer = 180 + Math.floor(Math.random() * 300);
-      continue;
-    }
-
-    // === Bypass logic ===
-    if (bus.state === "bypass") {
-      bus.vx = GO_AROUND_SPEED * 0.6 + Math.random() * GO_AROUND_SPEED * 0.4;
-      bus.bypassProgress += bus.vx;
-      if (bus.bypassProgress >= GO_AROUND_DISTANCE) {
-        bus.state = "follow";
-        bus.bypassProgress = 0;
-      }
-      bus.x += bus.vx;
-      continue;
-    }
-
-    if (distanceToPlayer > 0 && distanceToPlayer <= MIN_DISTANCE) {
-      bus.vx = 0;
-      bus.beepTimer = (bus.beepTimer || 0) + 1;
-      if (bus.beepTimer >= BEEP_INTERVAL) {
-        bus.beepTimer = 0;
-        playHonkSound();
-        if (Math.random() < 0.05) {
-          bus.state = "bypass";
-          bus.bypassProgress = 0;
-        }
-      }
-      bus.x += bus.vx;
-      continue;
-    }
-
-    // === Time vs Schedule ===
+    // === 1. Basic schedule following ===
     const offsetMs = scheduleOffsets.get(bus) ?? 0;
     const idealX = IDEAL_SPEED * ((elapsedTime - offsetMs) / 1000);
     const dx = idealX - bus.x;
-    const absDx = Math.abs(dx);
-    const latenessSec = dx / IDEAL_SPEED;
 
-    // Reset hold once close enough to schedule
-    if (Math.abs(latenessSec) <= bus.scheduleTolerance) {
-      bus.earlyHoldApplied = false;
-    }
+    // move toward ideal with a bit of smoothing
+    let targetSpeed = dx * 0.02; // proportional catch-up
+    targetSpeed += (Math.random() - 0.5) * 0.2; // randomness wiggle
+    targetSpeed = Math.max(0, Math.min(bus.maxSpeed, targetSpeed));
 
-    // If too early → maybe wait
-    if (latenessSec > bus.scheduleTolerance && !bus.earlyHoldApplied) {
-      if (bus.earlyHoldBias > 0.4) { // only some drivers choose to hold
-        bus.lingerTimer = 600 + Math.floor(Math.random() * 600); // 10–20s
-        bus.earlyHoldApplied = true;
-        continue;
-      }
-    }
-
-    // === Stop logic ===
-    let stoppingNow = false;
-    for (const stop of stops) {
-      if (Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE && !stop.playerOnly) {
-        let shouldStop = Math.random() < bus.stopChance;
-        if (shouldStop) {
-          bus.lingerTimer = 900;
-          stoppingNow = true;
-          break;
-        }
-      }
-    }
-    if (stoppingNow) {
+    // === 2. Random stops ===
+    if (bus.lingerTimer > 0) {
       bus.vx = 0;
-      bus.x += bus.vx;
-      continue;
+      bus.lingerTimer--;
+    } else if (Math.random() < 0.001) {
+      // small chance to stop
+      bus.lingerTimer = 60 + Math.floor(Math.random() * 120); // 1–3s
+      bus.vx = 0;
+    } else {
+      bus.vx += (targetSpeed - bus.vx) * 0.1; // smooth accel/decel
     }
 
-    // === Bus following logic ===
-    let nearestBusAhead = null;
-    let minDistAhead = Infinity;
+    // === 3. Following + overtaking ===
+    let nearestAhead = null;
+    let minDist = Infinity;
     for (const other of aiBuses) {
       if (other === bus) continue;
       const dist = other.x - bus.x;
-      if (dist > 0 && dist < minDistAhead) {
-        minDistAhead = dist;
-        nearestBusAhead = other;
+      if (dist > 0 && dist < minDist) {
+        minDist = dist;
+        nearestAhead = other;
       }
     }
 
-    let adjustedMaxSpeed = bus.maxSpeed;
-    if (nearestBusAhead && minDistAhead < SAFE_FOLLOW_DISTANCE) {
-      adjustedMaxSpeed *= minDistAhead / SAFE_FOLLOW_DISTANCE;
+    if (nearestAhead && minDist < 200) {
+      // Too close → slow down
+      bus.vx *= 0.8;
+      // Chance to overtake
+      if (Math.random() < 0.01) {
+        bus.vx = bus.maxSpeed * (1.1 + Math.random() * 0.2);
+      }
     }
 
-    // === Personality-based movement ===
-    let targetSpeed;
-    switch (bus.personality) {
-      case "cruiser":
-        targetSpeed = bus.cruisingSpeed + (Math.random() - 0.5) * 0.4;
-        break;
-      case "stopGo":
-        if (Math.random() < 0.002) {
-          bus.lingerTimer = 120;
-          targetSpeed = 0;
-        } else {
-          targetSpeed = IDEAL_SPEED + Math.random() * 2;
-        }
-        break;
-      case "steady":
-        targetSpeed = IDEAL_SPEED + dx * 0.015;
-        break;
-      case "nervous":
-        targetSpeed = dx > 0
-          ? Math.min(adjustedMaxSpeed, IDEAL_SPEED + absDx * 0.03)
-          : Math.max(IDEAL_SPEED * 0.6, IDEAL_SPEED - absDx * 0.04);
-        break;
-      case "skipper":
-        targetSpeed = adjustedMaxSpeed + (Math.random() - 0.5);
-        break;
-      default:
-        targetSpeed = IDEAL_SPEED;
-    }
-
-    // === Schedule adjustment ===
-    let scheduleSpeedAdjust = 0;
-    if (latenessSec < -bus.scheduleTolerance) {
-      // Late → catch up
-      scheduleSpeedAdjust = Math.min(IDEAL_SPEED * 0.5, -dx * bus.catchupFactor);
-    } else if (latenessSec > bus.scheduleTolerance) {
-      // Early → slow down a bit
-      scheduleSpeedAdjust = -Math.min(IDEAL_SPEED * 0.3, dx * bus.catchupFactor);
-    }
-
-    targetSpeed += scheduleSpeedAdjust;
-
-    // Apply randomness and smoothing
-    targetSpeed += (Math.random() - 0.5) * 0.2;
-    targetSpeed = Math.max(0, Math.min(adjustedMaxSpeed, targetSpeed));
-    bus.vx += (targetSpeed - bus.vx) * 0.08;
+    // === 4. Apply movement ===
     bus.x += bus.vx;
-
-    // === Log bus status ===
-    const status =
-      latenessSec > 1 ? "EARLY" :
-      latenessSec < -1 ? "LATE" : "ON TIME";
-
-    logStatuses.push(
-      `Bus (${bus.personality}) x=${bus.x.toFixed(1)} ${status} (${latenessSec.toFixed(2)}s)`
-    );
-  }
-
-  if (elapsedTime - lastLogTime > 5000) {
-    console.log("=== Bus Status ===\n" + logStatuses.join(" | ") + "\n===================");
-    lastLogTime = elapsedTime;
   }
 }
 
