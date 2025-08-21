@@ -2571,6 +2571,7 @@ const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
 const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
 const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after stop
 // === AI Bus Update with Late and Stopper Buses ===
+// === AI Bus Update with Multiple Behaviors ===
 function updateAIBuses(deltaTime, playerBus) {
   const elapsedTime = performance.now() - startTime;
 
@@ -2578,41 +2579,53 @@ function updateAIBuses(deltaTime, playerBus) {
     // Assign bus behavior once
     if (!bus.behavior) {
       const roll = Math.random();
-      if (roll < 0.15) bus.behavior = "alwaysLate";  // 10-20s behind schedule
-      else if (roll < 0.3) bus.behavior = "stopper";  // speeds, stays at stops long
-      else bus.behavior = "normal";                   // regular catch-up
+      if (roll < 0.1) bus.behavior = "alwaysLate";      // 10-20s late
+      else if (roll < 0.2) bus.behavior = "stopper";    // speeds but lingers long
+      else if (roll < 0.3) bus.behavior = "earlyBird";  // tries to be slightly early
+      else if (roll < 0.4) bus.behavior = "lazyCollector"; // stops at all stops
+      else bus.behavior = "normal";                     // default catch-up
       bus.lingerTimer = 0;
+      bus.visitedStops = new Set();
     }
 
     // === 1. Schedule following ===
     const offsetMs = scheduleOffsets.get(bus) ?? 0;
     let idealX = IDEAL_SPEED * ((elapsedTime - offsetMs) / 1000);
-    
-    // Apply behavior adjustments
+
+    // Behavior adjustments
     if (bus.behavior === "alwaysLate") {
-      idealX -= 10000 + Math.random() * 10000; // 10-20 seconds late (~px equivalent)
+      idealX -= 10000 + Math.random() * 10000; // 10-20 sec late
+    } else if (bus.behavior === "earlyBird") {
+      idealX += 3000 + Math.random() * 2000; // 3-5 sec early
     }
 
     const dx = idealX - bus.x;
-    let targetSpeed = dx * 0.02;               // proportional catch-up
-    targetSpeed += (Math.random() - 0.5) * 0.2; // wiggle
+    let targetSpeed = dx * 0.02; // proportional catch-up
+    targetSpeed += (Math.random() - 0.5) * 0.2; // small wiggle
     targetSpeed = Math.max(0, Math.min(bus.maxSpeed, targetSpeed));
 
-    // === 2. Stopper behavior & random stops ===
-    if (bus.behavior === "stopper") {
-      // stop longer at any stops
-      if (bus.lingerTimer <= 0 && Math.random() < 0.005) {
-        bus.lingerTimer = 600 + Math.floor(Math.random() * 600); // 10-20 sec linger
+    // === 2. Stopper / LazyCollector / random stops ===
+    let shouldStop = false;
+    for (const stop of stops) {
+      const distToStop = Math.abs(bus.x - stop.x);
+      if (!bus.visitedStops.has(stop) && distToStop < 50) {
+        if (bus.behavior === "stopper") {
+          bus.lingerTimer = 600 + Math.floor(Math.random() * 600); // 10-20 sec linger
+        } else if (bus.behavior === "lazyCollector") {
+          bus.lingerTimer = 300 + Math.floor(Math.random() * 300);
+        } else if (bus.behavior === "normal" && Math.random() < 0.5) {
+          bus.lingerTimer = 200 + Math.floor(Math.random() * 200);
+        }
+        bus.visitedStops.add(stop);
+        shouldStop = true;
+        break;
       }
-    } else if (bus.lingerTimer <= 0 && Math.random() < 0.001) {
-      // normal random stops
-      bus.lingerTimer = 300 + Math.floor(Math.random() * 300);
     }
 
     if (bus.lingerTimer > 0) {
       bus.vx = 0;
       bus.lingerTimer--;
-    } else {
+    } else if (!shouldStop) {
       bus.vx += (targetSpeed - bus.vx) * 0.1; // smooth accel/decel
     }
 
@@ -2635,7 +2648,7 @@ function updateAIBuses(deltaTime, playerBus) {
       }
     }
 
-    // === 4. Apply movement ===
+    // === 4. Move bus ===
     bus.x += bus.vx;
   }
 }
