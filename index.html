@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Stopped Go 2.0</title>
+  <title>Go 2.0</title>
   <style>
     body {
       margin: 0;
@@ -2517,7 +2517,7 @@ function getNearestAIBuses(playerX) {
 }
 // === Constants ===
 const MAX_SPEED_BUFFER = 5;
-const TOLERANCE_SEC = 1.5;
+const TOLERANCE_SEC = 10;
 const MAX_CATCHUP_SPEED_BOOST = 7;
 const MAX_LATE_SPEED_BOOST = 12;
 const EARLY_OFFSET_SEC = 10;
@@ -2591,7 +2591,7 @@ function updateAIBuses(deltaTime, playerBus) {
       bus.lingerTimer--;
     } else if (Math.random() < 0.001) {
       // small chance to stop
-      bus.lingerTimer = 60 + Math.floor(Math.random() * 120); // 1–3s
+      bus.lingerTimer = 120 + Math.floor(Math.random() * 240);
       bus.vx = 0;
     } else {
       bus.vx += (targetSpeed - bus.vx) * 0.1; // smooth accel/decel
@@ -2613,7 +2613,7 @@ function updateAIBuses(deltaTime, playerBus) {
       // Too close → slow down
       bus.vx *= 0.8;
       // Chance to overtake
-      if (Math.random() < 0.01) {
+      if (Math.random() < 0.1) {
         bus.vx = bus.maxSpeed * (1.1 + Math.random() * 0.2);
       }
     }
