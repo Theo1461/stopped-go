@@ -2568,75 +2568,49 @@ const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
 const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
 const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after stop
 
-// === AI Bus Update ===
 function updateAIBuses(deltaTime, playerBus) {
   const elapsedTime = performance.now() - startTime;
 
   for (const bus of aiBuses) {
     const offsetMs = scheduleOffsets.get(bus) ?? 0;
     const schedule = busSchedule.get(bus) || []; // each = { stopX, timeMs }
-
-    // assign personality if not set
-    if (!bus.personality) {
-      const r = Math.random();
-      if (r < 0.2) bus.personality = "late";     // always a little late
-      else if (r < 0.4) bus.personality = "stopper"; // speeds then waits
-      else bus.personality = "normal";           // tries to stay on schedule
-    }
-
-    let targetSpeed = bus.maxSpeed * 0.5; // default cruise
+    let targetSpeed = bus.maxSpeed * 0.5; // default cruise speed
 
     // === 1. Find next stop ===
     let nextStop = null;
     for (const s of schedule) {
-      if (bus.x < s.stopX) {
+      if (bus.x < s.stopX) { // stop ahead
         nextStop = s;
         break;
       }
     }
 
-    // === 2. Stop + timing logic ===
+    // === 2. Stop logic ===
     if (nextStop) {
       const dist = nextStop.stopX - bus.x;
-      let timeUntilStop = nextStop.timeMs - (elapsedTime - offsetMs);
-
-      // personality tweak
-      if (bus.personality === "late") {
-        timeUntilStop -= 2000; // tends to arrive 2s later
-      } else if (bus.personality === "stopper") {
-        timeUntilStop += 1000; // speeds but then waits a lot
-      }
+      const timeUntilStop = nextStop.timeMs - (elapsedTime - offsetMs);
 
       if (dist < 50) {
-        // at the stop
+        // At the stop → must wait until schedule time
         if (timeUntilStop > 0) {
           bus.vx = 0; // early → wait
           continue;
         } else if (!bus.visitedStops?.has(nextStop)) {
+          // Record arrival time (early/late check)
           if (!bus.visitedStops) bus.visitedStops = new Set();
           bus.visitedStops.add(nextStop);
 
           const diff = (elapsedTime - offsetMs) - nextStop.timeMs;
-          console.log(
-            `Bus ${bus.id} (${bus.personality}) arrived at stop: ${
-              diff > 0 ? diff + "ms late" : -diff + "ms early"
-            }`
-          );
+          console.log(`Bus ${bus.id} arrived at stop: ${diff > 0 ? diff + "ms late" : -diff + "ms early"}`);
         }
       } else {
-        // not at stop yet → adjust speed
-        let idealSpeed = dist / (timeUntilStop / 1000);
-
-        // stopper personality → speed hard then brake at stop
-        if (bus.personality === "stopper") {
-          idealSpeed = bus.maxSpeed;
-        }
-
+        // Not at stop yet → adjust speed based on schedule
+        const idealSpeed = dist / (timeUntilStop / 1000);
         targetSpeed = Math.max(0, Math.min(bus.maxSpeed, idealSpeed));
       }
     }
 
-    // === 3. Random wiggle & occasional idle ===
+    // === 3. Random wiggle & occasional stop ===
     if (bus.lingerTimer > 0) {
       bus.vx = 0;
       bus.lingerTimer--;
