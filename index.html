@@ -2328,7 +2328,7 @@ function spawnAICar(x, y) {
   });
 }
 
-const BUS_SPACING_SEC = 30;      // 20 seconds between buses schedule offsets
+const BUS_SPACING_SEC = 15;      // 20 seconds between buses schedule offsets
 const IDEAL_SPEED = 150;         // px per second (5000 px in 25 seconds)
 
 function updateAICars(bus) {
@@ -2527,10 +2527,12 @@ const idealSpeedPerMs = IDEAL_SPEED / 1000;
 // aiBusCount buses excluding playerBus
 // Define exact spawn positions in pixels for each bus individually (length = aiBusCount excluding player)
 const aiBusSpawnPositions = [
-  -20600,
-  -5500,
+  -15000,
+  -9000,
+  -4500,
   4500,
-  19300,  
+  9799,
+  13500,
 ];
 
 // Corresponding schedule offsets in milliseconds (must match spacing to keep them on schedule)
@@ -2559,19 +2561,19 @@ for (let i = 0; i < aiBusSpawnPositions.length; i++) {
   aiBuses.push(aiBus);
   scheduleOffsets.set(aiBus, offsetMs);
 }
-
-// Constants for mode probabilities and timings
-const MODE_SWITCH_CHANCE_PER_FRAME = 0.001; // ~0.1% chance per frame to switch mode
-const LONG_STOP_PROBABILITY = 0.002; // Probability to start a long stop for Stop-and-Go buses
-const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
-const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
-const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after stop
-
 // === AI Bus Update ===
 function updateAIBuses(deltaTime, playerBus) {
   const elapsedTime = performance.now() - startTime;
 
   for (const bus of aiBuses) {
+    // Assign bus type once
+    if (!bus.behavior) {
+      const r = Math.random();
+      if (r < 0.2) bus.behavior = "late";       // accepts lateness
+      else if (r < 0.4) bus.behavior = "stopper"; // speedster stopper
+      else bus.behavior = "normal";
+    }
+
     const offsetMs = scheduleOffsets.get(bus) ?? 0;
     const schedule = busSchedule.get(bus) || []; // each = { stopX, timeMs }
     let targetSpeed = bus.maxSpeed * 0.5; // default cruise speed
@@ -2591,35 +2593,58 @@ function updateAIBuses(deltaTime, playerBus) {
       const timeUntilStop = nextStop.timeMs - (elapsedTime - offsetMs);
 
       if (dist < 50) {
-        // At the stop → must wait until schedule time
+        // At the stop → must wait until schedule time (unless "late" type)
         if (timeUntilStop > 0) {
-          bus.vx = 0; // early → wait
-          continue;
-        } else if (!bus.visitedStops?.has(nextStop)) {
-          // Record arrival time (early/late check)
+          if (bus.behavior === "stopper" || bus.behavior === "normal") {
+            bus.vx = 0; // wait if early
+            continue;
+          }
+          // "late" buses don't bother waiting, they leave as soon as they arrive
+        }
+
+        // Record arrival
+        if (!bus.visitedStops?.has(nextStop)) {
           if (!bus.visitedStops) bus.visitedStops = new Set();
           bus.visitedStops.add(nextStop);
 
           const diff = (elapsedTime - offsetMs) - nextStop.timeMs;
-          console.log(`Bus ${bus.id} arrived at stop: ${diff > 0 ? diff + "ms late" : -diff + "ms early"}`);
+          console.log(
+            `Bus ${bus.id} [${bus.behavior}] arrived at stop: ${
+              diff > 0 ? diff + "ms late" : -diff + "ms early"
+            }`
+          );
         }
       } else {
-        // Not at stop yet → adjust speed based on schedule
-        const idealSpeed = dist / (timeUntilStop / 1000);
-        targetSpeed = Math.max(0, Math.min(bus.maxSpeed, idealSpeed));
+        // Not at stop yet → adjust speed
+        if (bus.behavior === "late") {
+          // Always cruise around half speed, never rushing
+          targetSpeed = bus.maxSpeed * 0.5;
+        } else if (bus.behavior === "stopper") {
+          // Rush full speed to stop
+          targetSpeed = bus.maxSpeed;
+        } else {
+          // Normal adjusts to schedule
+          const idealSpeed = dist / (timeUntilStop / 1000);
+          targetSpeed = Math.max(0, Math.min(bus.maxSpeed, idealSpeed));
+        }
       }
     }
 
-    // === 3. Random wiggle & occasional stop ===
-    if (bus.lingerTimer > 0) {
-      bus.vx = 0;
-      bus.lingerTimer--;
-    } else if (Math.random() < 0.001) {
-      bus.lingerTimer = 60 + Math.floor(Math.random() * 120);
-      bus.vx = 0;
+    // === 3. Random wiggle & occasional stop (only for normal) ===
+    if (bus.behavior === "normal") {
+      if (bus.lingerTimer > 0) {
+        bus.vx = 0;
+        bus.lingerTimer--;
+      } else if (Math.random() < 0.001) {
+        bus.lingerTimer = 60 + Math.floor(Math.random() * 120);
+        bus.vx = 0;
+      } else {
+        targetSpeed += (Math.random() - 0.5) * 0.2;
+        bus.vx += (targetSpeed - bus.vx) * 0.1;
+      }
     } else {
-      targetSpeed += (Math.random() - 0.5) * 0.2;
-      bus.vx += (targetSpeed - bus.vx) * 0.1;
+      // Direct target speed for special behaviors
+      bus.vx += (targetSpeed - bus.vx) * 0.2;
     }
 
     // === 4. Following + overtaking ===
@@ -2644,6 +2669,12 @@ function updateAIBuses(deltaTime, playerBus) {
     bus.x += bus.vx;
   }
 }
+// Constants for mode probabilities and timings
+const MODE_SWITCH_CHANCE_PER_FRAME = 0.001; // ~0.1% chance per frame to switch mode
+const LONG_STOP_PROBABILITY = 0.002; // Probability to start a long stop for Stop-and-Go buses
+const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
+const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
+const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after 
 function updateLatenessUI(playerBus) {
   const elapsedTime = performance.now() - startTime;
 
