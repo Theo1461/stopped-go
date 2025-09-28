@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Go 2.0</title>
+  <title>Stopped Go 2.0</title>
   <style>
     body {
       margin: 0;
@@ -391,6 +391,37 @@ button:active {
 .row {
   margin-top: 8px;
 }
+#fuel-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+#fuel-bar-container {
+  flex-grow: 1; /* Allows the bar to take up available space */
+  height: 20px;
+  background-color: #ccc;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid #aaa;
+}
+
+#fuel-bar {
+  height: 100%;
+  width: 100%; /* Start at 100% width */
+  background-color: #4CAF50; /* Green for full */
+  transition: width 0.3s, background-color 0.3s;
+}
+
+#refuel-btn {
+  padding: 5px 10px;
+  cursor: pointer;
+  background-color: #3f51b5;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
   </style>
 </head>
 <body>
@@ -400,7 +431,14 @@ button:active {
       <div id="pointsDisplay">Points: 0</div>
       <div id="speedDistance">Distance: 0 px<br>Speed: 0 px/s</div>
       <div id="vxDisplay" style="display: none">vx: 0</div>
-
+    <div id="fuel-control">
+      <label for="fuel-level">Fuel Level:</label>
+      <div id="fuel-bar-container">
+        <div id="fuel-bar"></div>
+      </div>
+      <span id="fuel-percent">100%</span>
+      <button id="refuel-btn">Refuel (R)</button>
+  </button></div>
       <button id="openGradientMenu">Customize Menu</button>
       <button onclick="showStopHistory()">View Stop History</button>
 
@@ -458,7 +496,7 @@ button:active {
 
   <button data-key="s">Light</button>
   <button data-key="n">Night</button>
-  <button data-key="t">Test</button>
+  <button data-key="[">Door</button>
 </div>
 
 <pre id="lateness-info" style="white-space: pre-wrap; font-family: monospace;"></pre>
@@ -529,7 +567,7 @@ let debugMode = false;
     keys[key] = false;
   });
 let spotlightOn = false
-let night = true;  // toggle this to switch modes
+let night = false;  // toggle this to switch modes
   function handleKeyPress(key) {
     if (key === 'arrowright') {
       accelerating = !accelerating;
@@ -567,7 +605,9 @@ function simulateKeyPress(key) {
 }
 
 // Existing keys state and logic...
-
+function bracket() {
+    frontOpen = !frontOpen
+}
 document.querySelectorAll('#quickKeyboard button').forEach(button => {
   button.addEventListener('click', () => {
     const key = button.getAttribute('data-key').toLowerCase();
@@ -575,6 +615,8 @@ document.querySelectorAll('#quickKeyboard button').forEach(button => {
     // For numbers and 'l', simulate real keypress event
     if (key === '1' || key === '2' || key === '3' || key === 'l') {
       simulateKeyPress(key);
+    } else if (key === '[') {
+      bracket()
     } else {
       // For other keys, use previous logic:
       if (keys[key]) return;
@@ -647,7 +689,6 @@ window.addEventListener('keydown', (e) => {
   };
 let acceleration = 0.1;      // Acceleration rate
 const almostOne = 1 - 1e-222     // Max speed
-const bridges = [];
 let camFollowX = 0;          // Camera follow target x
 let delayTimer = 0;          // For 2s delay
 let distance2 = 0;
@@ -670,15 +711,53 @@ let sharedState = 2; // Start on red
 
 
 let violationMessageTimer = 0;
-// Generate bridges with dark brown columns
-const bridgePositions = [500]; // Required first bridge
-while (bridgePositions.length < 10) {
-  const next = bridgePositions[bridgePositions.length - 1] + Math.floor(10000 + Math.random() * 3000);
-  bridgePositions.push(next);
+
+// NEW: Road generation logic
+const ROAD_BASE_Y = 500;
+const roadBridges = [];
+const bridgeLength = 2000;
+const bridgeHeight = 150;
+
+// Generate some bridges procedurally
+let lastBridgeX = 5000;
+for (let i = 0; i < 20; i++) {
+    const start = lastBridgeX + 5000 + Math.random() * 5000;
+    roadBridges.push({
+        start: start,
+        end: start + bridgeLength,
+        y: ROAD_BASE_Y - bridgeHeight
+    });
+    lastBridgeX = start + bridgeLength;
 }
 
-for (const x of bridgePositions) {
-  bridges.push({ x });
+function getBumpY(x) {
+    // Combine sine waves for natural-looking bumps
+    return ROAD_BASE_Y + Math.sin(x / 300) * 15 + Math.sin(x / 800) * 20;
+}
+
+function getRoadY(x) {
+    for (const bridge of roadBridges) {
+        const transition = 200; // How long the ramp is
+        // Smooth transition onto the bridge
+        if (x > bridge.start - transition && x < bridge.start) {
+            const progress = (x - (bridge.start - transition)) / transition;
+            const startY = getBumpY(bridge.start - transition);
+            // Simple linear interpolation for the ramp
+            return startY + (bridge.y - startY) * progress;
+        }
+        // Flat on the bridge
+        if (x >= bridge.start && x <= bridge.end) {
+            return bridge.y;
+        }
+        // Smooth transition off the bridge
+        if (x > bridge.end && x < bridge.end + transition) {
+            const progress = (x - bridge.end) / transition;
+            const endY = getBumpY(bridge.end + transition);
+            return bridge.y + (endY - bridge.y) * progress;
+        }
+    }
+    // Default to bumpy road if not on a bridge
+    return getBumpY(x);
 }
 
 function update(timestamp) {
@@ -758,6 +837,89 @@ function createLoopingSource(buffer, gainValue = 0.5) {
   source.connect(gain).connect(audioCtxA.destination);
   return { source, gain };
 }
+const MAX_FUEL = 100; // Total fuel capacity
+  let currentFuel = 100;
+  let fuelDepleted = false; // Flag to stop engine/movement
+
+  // DOM element references
+  const fuelBar = document.getElementById('fuel-bar');
+  const fuelPercentSpan = document.getElementById('fuel-percent');
+  const refuelBtn = document.getElementById('refuel-btn');
+
+  // ===================================================================
+  // NEW: Fuel System Functions
+  // ===================================================================
+
+  function updateFuel(deltaT, vx) {
+    if (fuelDepleted) return;
+    if (currentFuel === NaN) {
+      currentFuel = 100
+    }
+    // Calculate consumption rate (more consumption when moving and accelerating)
+    // Base consumption: 0.05 units per second (at idle)
+    // Driving consumption: add 0.2 units per second * velocity magnitude
+    let consumptionRate = 0.003 + (vx * 0.01034)
+    let consumption = consumptionRate * 0.100105
+
+    currentFuel -= consumption;
+
+    // Check if fuel is depleted
+    if (currentFuel <= 0) {
+      currentFuel = 0;
+      fuelDepleted = true;
+      console.log("Fuel Depleted! Bus has stopped.");
+    }
+
+    // Update the visual gauge and color
+    const percent = currentFuel;
+    fuelPercentSpan.textContent = `${percent.toFixed(0)}%`;
+    fuelBar.style.width = `${percent}%`;
+
+    // Change color: Green (>50%), Yellow (20-50%), Red (<20%)
+    if (percent > 50) {
+      fuelBar.style.backgroundColor = '#4CAF50';
+    } else if (percent > 20) {
+      fuelBar.style.backgroundColor = '#FFC107';
+    } else {
+      fuelBar.style.backgroundColor = '#F44336';
+    }
+  }
+
+  function refuel() {
+    // Only refuel if the bus is stopped (optional, but good practice)
+    if (vx !== 0) {
+        console.log("Cannot refuel while moving!");
+        return;
+    }
+    
+    currentFuel = MAX_FUEL;
+    fuelDepleted = false;
+    updateFuel(0, 0); // Force a visual update
+    console.log("Bus Refueled!");
+  }
+
+  // ===================================================================
+  // NEW: Refueling Event Listeners
+  // ===================================================================
+
+  refuelBtn.addEventListener('click', refuel);
+
+  document.addEventListener('keydown', (event) => {
+    // Assuming 'R' is the refuel key
+    if (event.code === 'KeyR') {
+      refuel();
+    }
+    // Placeholder for other keys (e.g., 'W' for acceleration)
+    if (event.code === 'KeyW' && !fuelDepleted) {
+        isMoving = true;
+    }
+  });
+  
+  document.addEventListener('keyup', (event) => {
+    if (event.code === 'KeyW') {
+        isMoving = false;
+    }
+  });
 const keysDown = new Set();
 // === Start Audio A ===
 let trainApproaching = false
@@ -769,7 +931,12 @@ let trainFlashOn = true;
 let jitterOscillator = null;
 let jitterLFOGain = null;
 let jitterOscActive = false;
+// Global Variables for the new Retarder Spit feature
+let retarderNoise, retarderSource, retarderGain;
+let lastVX = 0; // Track previous speed for deceleration detection
+// Set the target system to A for the new implementation
 function step() {
+  // Use the repurposed System A functions for the 16101 sound
   if (currentSystem === "A") {
     updateAudioSystemA(vx);
   } else if (currentSystem === "C") {
@@ -779,17 +946,20 @@ function step() {
       updateArticulatedAudio(vx)
     }
   }
+  // Store the current speed for the next step's deceleration check
+  lastVX = vx;
 }
 step()
 // === Audio Context ===
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 // === Global Variables ===
-let idleNoise, driveNoise, jitterNoise;
-let idleSource, jitterSource
+// Renaming for clarity to match the sound components of the 16101 bus
+let engineRumble, turboWhine; // Replaces idleNoise, jitterNoise
+let engineSource, turboSource; 
 
-let idleOsc, jitterOsc, driveOsc;
-let idleOscGain, jitterOscGain, driveOscGain;
+let idleOsc, turboOsc, driveOsc; // idleOsc = deep engine hum
+let idleOscGain, turboOscGain, driveOscGain;
 
 
 // === Create White Noise Buffer ===
@@ -832,32 +1002,42 @@ function createOscillator(type = 'sine', freq = 60, gainVal = 0.2) {
   return { osc, gain };
 }
 
-// === Start Audio System A ===
+// === Start Audio System A (Refactored for 16101) ===
 function startAudioA() {
-  // Create white noise buffers
-  idleNoise = createNoiseBuffer(0.3, 0.3);
-  jitterNoise = createNoiseBuffer(0.4, 0.8);
-  driveNoise = createNoiseBuffer(2, 0.4);
+  // 1. ENGINE RUMBLE (DEEP LOW FREQUENCY NOISE)
+  idleNoise = createNoiseBuffer(0.3, 0.4); // Deeper, more rumble
+  
+  // 2. TURBO WHINE (WHITE NOISE MIX)
+  jitterNoise = createNoiseBuffer(0.4, 0.7); // High volume white noise for turbo sound
+  
+  // 3. DRIVE NOISE (Main Diesel Combustion)
+  driveNoise = createNoiseBuffer(2, 0.6); // Louder combustion noise
+  
+  // 4. RETARDER SPIT (A short, loud burst of air)
+  retarderNoise = createNoiseBuffer(0.05, 1.0); 
 
   // Create looping noise sources
-  const idle = createNoiseSource(idleNoise, 0.1);
-  const jitter = createNoiseSource(jitterNoise, 0.0);
-
+  const idle = createNoiseSource(idleNoise, 0.3); // Initial idle rumble is prominent
+  const jitter = createNoiseSource(jitterNoise, 0.0); // Now the main white noise whine source
+  
   // Raw oscillators for tonal layers
-  const idleTone = createOscillator('sine', 55, 0.08);     // low hum
-  const jitterTone = createOscillator('triangle', 90, 0.0); // subtle flicker (start muted)
-  const driveTone = createOscillator('square', 200, 0.0);   // engine buzz (start muted)
+  // DEEP ENGINE IDLE HUM (Cummins L9 is a deep straight-six)
+  const idleTone = createOscillator('sine', 35, 0.15);     // Lower frequency for deeper sound
+  // HIGH-PITCHED WHINE TONE (Mix with white noise for the 'mixed' whine sound)
+  const jitterTone = createOscillator('sawtooth', 400, 0.0); // High frequency sawtooth
+  // ENGINE BUZZ/DRIVE TONE
+  const driveTone = createOscillator('square', 150, 0.0);   // slightly lower frequency
 
   idleOsc = idleTone.osc;
   idleOscGain = idleTone.gain;
-
+  // Repurposing jitterOsc/Gain for the tonal part of the whine
   jitterOsc = jitterTone.osc;
   jitterOscGain = jitterTone.gain;
 
   driveOsc = driveTone.osc;
   driveOscGain = driveTone.gain;
 
-  // Drive noise source with effects
+  // Drive noise source with effects (Main Combustion Sound)
   driveNoiseSource = audioCtx.createBufferSource();
   driveNoiseSource.buffer = driveNoise;
   driveNoiseSource.loop = true;
@@ -867,109 +1047,193 @@ function startAudioA() {
 
   const filter = audioCtx.createBiquadFilter();
   filter.type = 'bandpass';
-  filter.frequency.value = 185;
-  filter.Q.value = 6;
-
-  const delay = audioCtx.createDelay();
-  delay.delayTime.value = 0.045;
-
-  const feedback = audioCtx.createGain();
-  feedback.gain.value = 0.8;
-
-  delay.connect(feedback);
-  feedback.connect(delay);
+  filter.frequency.value = 250; 
+  filter.Q.value = 4; 
 
   driveNoiseSource.connect(filter);
-  filter.connect(delay);
-  delay.connect(driveGain);
   filter.connect(driveGain);
   driveGain.connect(audioCtx.destination);
 
-  // Start noise sources
-  idle.source = idle.source || idle.source;
-  jitter.source = jitter.source || jitter.source;
+  // Retarder Spit Source (Initial setup)
+  retarderSource = audioCtx.createBufferSource();
+  retarderSource.buffer = retarderNoise;
+  retarderSource.loop = false;
+  
+  retarderGain = audioCtx.createGain();
+  retarderGain.gain.value = 0.0; // Start muted
+  retarderGain.connect(audioCtx.destination);
+
+  // Start all looping sources
   idle.source.start();
   jitter.source.start();
   driveNoiseSource.start();
 
   idleGain = idle.gain;
+  // Repurposing jitterGain for the white noise part of the whine
   jitterGain = jitter.gain;
 
   currentState = "idle";
 
-  // Initial gain values
-  idleGain.gain.value = 0.3;
-  idleOscGain.gain.value = 0.08;
+  // Initial gain values for idle
+  idleGain.gain.value = 0.35;
+  idleOscGain.gain.value = 0.15;
 }
 
-// === Update Audio System A ===
+// === Trigger Retarder Spit ===
+function triggerRetarderSpit() {
+    // 1. Create a new source for the single-shot sound
+    const spitSource = audioCtx.createBufferSource();
+    spitSource.buffer = retarderNoise; // Use the short, loud buffer
+    spitSource.loop = false;
+
+    // 2. Create a gain node for a quick fade-in/out
+    const spitGain = audioCtx.createGain();
+    spitGain.gain.value = 0.0;
+    spitGain.connect(audioCtx.destination);
+
+    // 3. Connect and schedule the gain
+    spitSource.connect(spitGain);
+    
+    const now = audioCtx.currentTime;
+    spitGain.gain.setValueAtTime(0.0, now);
+    spitGain.gain.linearRampToValueAtTime(0.8, now + 0.01); // Quick attack to max volume
+    spitGain.gain.linearRampToValueAtTime(0.0, now + 0.2);  // Quick decay
+    
+    // 4. Start and stop the source
+    spitSource.start(now);
+    spitSource.stop(now + 0.2); // Stop after the fade-out
+}
+
+// === Update Audio System A (Refactored for 16101) ===
 function updateAudioSystemA() {
   const VX = vx;
+  const maxSpeed = 12; // Retaining max speed from original code
   const speedNorm = Math.min(Math.abs(VX) / maxSpeed, 1);
+  const now = audioCtx.currentTime;
+  const fastRamp = 0.05;
+  const slowRamp = 0.3;
+  const accelRamp = 0.01; // Very fast attack for the initial grumble
+  const levelOffRamp = 0.8; // Slower decay for leveling off
+  
+  // 0. CHECK FOR RETARDER SPIT
+  const deceleration = lastVX - VX;
+  // Trigger if moving AND decelerating strongly
+  if (lastVX > 3.0 && deceleration > 0.5) {
+      triggerRetarderSpit();
+  }
 
-  // Idle state
+
+  // Idle state (Standing Still)
   if (VX < 0.5 && currentState !== "idle") {
     currentState = "idle";
+    
+    // ENGINE RUMBLE (Prominent idle)
+    idleGain.gain.setTargetAtTime(0.35, now, slowRamp);
+    idleOsc.frequency.setTargetAtTime(35, now, slowRamp);
+    idleOscGain.gain.setTargetAtTime(0.15, now, slowRamp);
 
-    idleGain.gain.setTargetAtTime(0.25, audioCtx.currentTime, 0.3);
-    idleOscGain.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.3);
+    // DRIVE/COMBUSTION (Quiet at idle)
+    driveGain.gain.setTargetAtTime(0.005, now, slowRamp);
+    driveOscGain.gain.setTargetAtTime(0.0, now, slowRamp);
 
-    driveGain.gain.setTargetAtTime(0.005, audioCtx.currentTime, 0.3);
-    driveOscGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.3);
-
-    jitterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.1);
-    jitterOscGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.1);
+    // TURBO WHINE (Off at idle)
+    jitterGain.gain.setTargetAtTime(0.0, now, slowRamp);
+    jitterOscGain.gain.setTargetAtTime(0.0, now, slowRamp);
   }
 
-  // Jitter state (low speed)
-  else if (VX >= 0.2 && VX < 2) {
-    if (currentState !== "jitter") {
-      currentState = "jitter";
+  // Low Speed / Acceleration (The 1-second deep grumble and initial spool)
+  else if (VX >= 0.5 && VX < 5) {
+    if (currentState !== "low_drive") {
+      currentState = "low_drive";
 
-      idleGain.gain.setTargetAtTime(0.08, audioCtx.currentTime, 0.2);
-      idleOscGain.gain.setTargetAtTime(0.02, audioCtx.currentTime, 0.2);
+      // 1-SECOND DEEP GRUMBLE ATTACK
+      idleGain.gain.setTargetAtTime(0.4, now, accelRamp);
+      idleOscGain.gain.setTargetAtTime(0.25, now, accelRamp);
+      // Decay from the grumble
+      idleGain.gain.linearRampToValueAtTime(0.15, now + 1.0);
+      idleOscGain.gain.linearRampToValueAtTime(0.05, now + 1.0);
 
-      driveGain.gain.setTargetAtTime(0.01, audioCtx.currentTime, 0.3);
-      driveOscGain.gain.setTargetAtTime(0.05, audioCtx.currentTime, 0.3);
+      // DRIVE/COMBUSTION (Starting to pick up)
+      driveGain.gain.setTargetAtTime(0.1, now, slowRamp);
+      driveOscGain.gain.setTargetAtTime(0.1, now, slowRamp);
 
-      jitterGain.gain.setTargetAtTime(0.3, audioCtx.currentTime, 0.2);
-      jitterOscGain.gain.setTargetAtTime(0.2, audioCtx.currentTime, 0.2);
+      // TURBO WHINE (Starts to spool - White Noise + Sawtooth)
+      jitterGain.gain.setTargetAtTime(0.2, now, slowRamp);
+      jitterOscGain.gain.setTargetAtTime(0.15, now, slowRamp);
+      
+      jitterOsc.frequency.setTargetAtTime(400, now, slowRamp); 
     }
+    
+    // Low-speed turbo and engine feedback modulation
+    const speedRatio = (VX - 0.5) / 4.5; 
+    
+    // Turbo whine intensity (increases with speed)
+    jitterGain.gain.setTargetAtTime(0.2 + 0.25 * speedRatio, now, fastRamp);
+    jitterOscGain.gain.setTargetAtTime(0.15 + 0.1 * speedRatio, now, fastRamp);
   }
 
-  // Drive state (higher speed)
-  else if (VX >= 2) {
+  // Drive state (Higher Speed / Cruising / Leveling)
+  else if (VX >= 5) {
     if (currentState !== "drive") {
       currentState = "drive";
 
-      idleGain.gain.setTargetAtTime(0.23, audioCtx.currentTime, 0.9);
-      idleOscGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.5);
+      // ENGINE RUMBLE (Fades to background low hum)
+      idleGain.gain.setTargetAtTime(0.05, now, levelOffRamp);
+      idleOscGain.gain.setTargetAtTime(0.0, now, levelOffRamp);
 
-      jitterGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.3);
-      jitterOscGain.gain.setTargetAtTime(0.0, audioCtx.currentTime, 0.3);
+      // TURBO WHINE (Constant high whine)
+      jitterGain.gain.setTargetAtTime(0.45, now, slowRamp);
+      jitterOscGain.gain.setTargetAtTime(0.25, now, slowRamp);
     }
 
-    const gain = 0.1 + 0.3 * speedNorm;
-    driveGain.gain.setTargetAtTime(gain, audioCtx.currentTime, 0.15);
+    // Dynamic updates based on speedNorm (0 to 1 over the full speed range)
+    
+    // DRIVE/COMBUSTION NOISE
+    const driveGainVal = 0.25 + 0.45 * speedNorm;
+    // Use the LEVEL OFF RAMP to simulate engine sustaining speed
+    driveGain.gain.setTargetAtTime(driveGainVal, now, levelOffRamp);
 
-    const oscGain = 0.15 + 0.35 * speedNorm;
-    driveOscGain.gain.setTargetAtTime(oscGain, audioCtx.currentTime, 0.15);
+    // DRIVE OSC (Higher pitch/buzz as engine strains)
+    const driveOscGainVal = 0.2 + 0.5 * speedNorm;
+    driveOscGain.gain.setTargetAtTime(driveOscGainVal, now, levelOffRamp);
+    
+    // ENGINE RPM/PITCH (Changes the frequency of the main drive tone)
+    driveOsc.frequency.setTargetAtTime(150 + 70 * speedNorm, now, levelOffRamp);
 
-    const rate = 1.0 + 0.6 * speedNorm;
-    driveNoiseSource.playbackRate.setTargetAtTime(rate, audioCtx.currentTime, 0.15);
+    // NOISE RATE (Faster 'chatter' as speed increases)
+    const rate = 1.0 + 1.0 * speedNorm;
+    driveNoiseSource.playbackRate.setTargetAtTime(rate, now, levelOffRamp);
+    
+    // TURBO WHINE PITCH (Picks up significantly with speed)
+    jitterOsc.frequency.setTargetAtTime(400 + 200 * speedNorm, now, levelOffRamp); 
   }
 
-  // Cap max speed
+  // Cap max speed (retained from original logic)
   if (VX >= 12) {
     vx = 12;
-    driveGain.gain.setTargetAtTime(0.35, audioCtx.currentTime, 0.1);
-    driveOscGain.gain.setTargetAtTime(0.5, audioCtx.currentTime, 0.1);
+    // Set fixed max volume at top speed
+    driveGain.gain.setTargetAtTime(0.7, now, fastRamp);
+    driveOscGain.gain.setTargetAtTime(0.7, now, fastRamp);
   }
 }
 
+// --- Door State and Animation Constants ---
+let frontOpen = 0; // Current open distance (0 to 100)
+const DOOR_SPEED = 4;
+const DOOR_MAX_OPEN = 50; // Max opening distance in pixels
+
+// --- Event Listeners to toggle the key state ---
+window.addEventListener('keydown', e => {
+  // Check for the '[' key
+  if (e.key === '[') {
+if (vx === 0) {
+    frontOpen = !frontOpen
+  } else return}
+  // Include other key listeners here...
+});
+
 let flashAlpha = 0;
 let flashTimer = 0;
-
     // ---------------- SYSTEM B ---------------- //
     let cruiseGainLevel = 0.005;
     const ctxB = new (window.AudioContext || window.webkitAudioContext)();
@@ -1485,7 +1749,6 @@ const lightRadius = 12;
 const STOP_INTERVAL = 1250;
 const STOP_SPAWN_LIMIT = 5000000;
 const STOP_RADIUS = 20;
-const STOP_DETECTION_RANGE = 500;
 const STOP_COUNTER_TRIGGER = 1000;
 
 let stops = [];
@@ -1499,38 +1762,42 @@ let camX = 0;
 let showNotice = false;
 let distance = 3000; // define outside loop
 
-const STOP_SPACING_OPTIONS = [1250, 2500, 2500];
-
+const STOP_SPACING_OPTIONS = [5000, 8000, 10000];
 function generateStops() {
   stops = [];
   let x = -10000;
+  let stopIndex = 0;
 
   while (x <= STOP_SPAWN_LIMIT) {
-    // Create primary stop
+    const assignedBus = stopIndex % 6; // 0–5, where 5 is the player
+    const isPlayerOnly = assignedBus === 5;
+
     const stop = {
       x,
       collected: false,
       regenTime: 0,
       special: Math.random() < 0.2,
-      playerOnly: Math.random() < 0.05,
+      playerOnly: isPlayerOnly,
+      assignedBus: assignedBus,
     };
     stops.push(stop);
 
-    // 20% chance of double stop placed 100px after the current stop
+    // 20% chance of double stop placed 500px after the current stop
     if (Math.random() < 0.2) {
       const doubleStop = {
         x: x + 500,
         collected: false,
         regenTime: 0,
         special: Math.random() < 0.2,
-        playerOnly: Math.random() < 0.05,
+        playerOnly: isPlayerOnly,
+        assignedBus: assignedBus,
       };
       stops.push(doubleStop);
     }
 
-    // Advance x by a random spacing
     const spacing = STOP_SPACING_OPTIONS[Math.floor(Math.random() * STOP_SPACING_OPTIONS.length)];
     x += spacing;
+    stopIndex++;
   }
 }
 generateStops()
@@ -1541,7 +1808,7 @@ let amount = 0
 
 
   const tilt = 0;
-  function drawMinimap(bus, camX) {
+function drawMinimap(bus, camX) {
   const minimap = document.getElementById('minimap');
   const ctx = minimap.getContext('2d');
   const w = minimap.width;
@@ -1550,79 +1817,103 @@ let amount = 0
   ctx.clearRect(0, 0, w, h);
 
   const RANGE = 20000; // Show ±10,000px from bus
+  const ROAD_WIDTH = h / 3;
+  const CENTER_Y = h / 2;
   const startX = bus.x - RANGE / 2;
   const endX = bus.x + RANGE / 2;
 
-  // Background
-  ctx.fillStyle = "#ddd";
-  ctx.fillRect(0, h / 3, w, h / 3);
+  // 1. DRAW ROAD BED (Darker color)
+  ctx.fillStyle = "#3c434c"; // Dark grey asphalt color
+  ctx.fillRect(0, CENTER_Y - ROAD_WIDTH / 2, w, ROAD_WIDTH);
 
-  // Only draw stops within the visible window
-for (const stop of stops) {
-  if (stop.x >= startX && stop.x <= endX) {
-    const percent = (stop.x - startX) / RANGE;
-    const x = percent * w;
-    const y = h / 2; // Define y properly
-    const color = stop.special ? "#777" : "#007bff";
+  // 2. DRAW LANE MARKER (Single solid yellow line)
+  ctx.strokeStyle = "#ffeb3b"; // Bright yellow
+  ctx.lineWidth = 2;
+  ctx.setLineDash([]); // Reset to solid line
+  ctx.beginPath();
+  ctx.moveTo(0, CENTER_Y);
+  ctx.lineTo(w, CENTER_Y);
+  ctx.stroke();
 
-    // Main stop circle
-    ctx.beginPath();
-    ctx.arc(x, y, 8, 0, Math.PI * 2);
-    ctx.fillStyle = stop.collected ? "#ccc" : color;
-    ctx.fill();
+  // 3. DRAW CURBS/Shoulders (Lighter grey borders)
+  ctx.fillStyle = "#a8b3c0"; // Light grey shoulder
+  ctx.fillRect(0, CENTER_Y - ROAD_WIDTH / 2 - 2, w, 2);
+  ctx.fillRect(0, CENTER_Y + ROAD_WIDTH / 2, w, 2);
 
-    // Player-only cyan indicator
-    if (stop.playerOnly) {
+  // 4. Draw BUS STOPS (Leave as circles, shifted to the side)
+  for (const stop of stops) {
+    if (stop.x >= startX && stop.x <= endX) {
+      const percent = (stop.x - startX) / RANGE;
+      const x = percent * w;
+      const y = CENTER_Y;
+      const color = stop.special ? "#f7c700" : "#007bff"; // Gold for special, blue for regular
+
+      // Main stop circle
       ctx.beginPath();
-      ctx.arc(x, y, 2.75, 0, Math.PI * 2); // use `y` here
-      ctx.fillStyle = "cyan";
+      ctx.arc(x, y + ROAD_WIDTH * 0.35, 3.5, 0, Math.PI * 2); // Shift slightly off center to the 'side'
+      ctx.fillStyle = stop.collected ? "rgba(100, 100, 100, 0.5)" : color;
       ctx.fill();
+
+      // Player-only cyan indicator (optional)
+      if (stop.playerOnly) {
+        ctx.beginPath();
+        ctx.arc(x, y + ROAD_WIDTH * 0.35, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = "cyan";
+        ctx.fill();
+      }
     }
   }
-}
 
-  // Draw the bus at center of minimap
-  const busX = (bus.x - startX) / RANGE * w;
-  ctx.beginPath();
-  ctx.arc(busX, h / 2, 5, 0, Math.PI * 2);
-  ctx.fillStyle = "#ff0000";
-  ctx.fill();
-    for (const aiBus of aiBuses) {
+  // 5. Draw AI Buses (Rectangles)
+  for (const aiBus of aiBuses) {
     if (aiBus.x >= startX && aiBus.x <= endX) {
       const percent = (aiBus.x - startX) / RANGE;
       const x = percent * w;
+      ctx.fillStyle = "#4caf50"; // Green for AI buses
+      
+      // AI Bus rectangle shape
+      ctx.fillRect(x - 4, CENTER_Y + 15 - ROAD_WIDTH * 0.3, 8, 7); 
+    }
+  }
+
+  // 6. Draw PLAYER BUS (Rectangle)
+  const playerX = (bus.x - startX) / RANGE * w;
+  ctx.fillStyle = "#ff5722"; // Orange-Red for player bus
+  
+  // Player Bus rectangle shape
+  ctx.fillRect(playerX - 5, CENTER_Y + 15 - ROAD_WIDTH * 0.3 - 1, 10, 9);
+  
+  // Add a small dot for direction
+  ctx.fillStyle = "#eee";
+  ctx.beginPath();
+  ctx.arc(playerX + 2, CENTER_Y + 15 - ROAD_WIDTH * 0.3 + 3, 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+
+  // 7. Draw TRAIN Traffic Lights
+  for (const light of trainTrafficLights) {
+    if (light.x >= startX && light.x <= endX) {
+      const percent = (light.x - startX) / RANGE;
+      const x = percent * w;
+
       ctx.beginPath();
-      ctx.arc(x, h / 2 - 10, 5, 0, Math.PI * 2); // Slightly above center line
-      ctx.fillStyle = "#0000ff";
+      ctx.arc(x, CENTER_Y - ROAD_WIDTH * 0.35, 3, 0, Math.PI * 2); // Placed above the road
+      ctx.fillStyle = light.state === 1 ? "#ff0000" : "#222222"; // Red or Off
       ctx.fill();
     }
   }
-// === Draw Train Traffic Lights on Minimap ===
-for (const light of trainTrafficLights) {
-  if (light.x >= startX && light.x <= endX) {
-    const percent = (light.x - startX) / RANGE;
-    const x = percent * w;
 
-    ctx.beginPath();
-    ctx.arc(x, h / 2, 4, 0, Math.PI * 2); // 10 px above center
-    ctx.fillStyle = light.state === 1 ? "#ff0000" : "#000000";
-    ctx.fill();
-  }
-}
-
-  // Viewport box based on screen size (approximation)
-  const screenWidthPx = window.innerWidth;
+  // 8. Viewport box based on screen size (approximation)
+  const screenWidthPx = 800; 
   const percentCamStart = (camX - startX) / RANGE;
   const percentCamEnd = (camX + screenWidthPx - startX) / RANGE;
   const camStart = percentCamStart * w;
   const camEnd = percentCamEnd * w;
 
-  ctx.strokeStyle = "#444";
-  ctx.strokeRect(camStart, h / 3, camEnd - camStart, h / 3);
+  ctx.strokeStyle = "#000000";
+  ctx.lineWidth = 1;
+  ctx.strokeRect(camStart, CENTER_Y - ROAD_WIDTH / 2 - 2, camEnd - camStart, ROAD_WIDTH + 4);
 }
-
-
-
 
   const fuelPickups = [
     { x: 100, collected: false },
@@ -1680,7 +1971,7 @@ function drawTrains(ctx, camX) {
     }
 
     const screenX = train.worldX - camX;
-    const y = 500;
+    const y = getRoadY(train.worldX);
     const width = 100 * train.scale;
     const height = 100 * train.scale;
 
@@ -1725,7 +2016,7 @@ function drawTransitStation(ctx, x, camX) {
 function drawTracks(ctx, camX) {
   trainTracks.forEach(({ x }) => {
     const screenX = x - camX;
-    const y = 500;
+    const y = getRoadY(x); // Make tracks follow road Y
     ctx.strokeStyle = "#6B4C3B";
     ctx.lineWidth = 100;
     ctx.beginPath();
@@ -1765,8 +2056,8 @@ function updateTrainTrafficLights(deltaTime) {
 }
 
 function drawTrainTrafficLights(ctx, camX, canvasWidth) {
-  const y = 520;
   trainTrafficLights.forEach(light => {
+    const y = getRoadY(light.x) - 30; // Position above the road
     const x = light.x - camX;
     if (x < -100 || x > canvasWidth + 3000) return;
     ctx.beginPath();
@@ -1778,12 +2069,13 @@ function drawTrainTrafficLights(ctx, camX, canvasWidth) {
     // Draw railway rectangle 100px after the traffic light
     // Find traffic light x for this track (if any)
       const railX = (light.x + 290) - camX;  // 100 px after light
+      const railY = getRoadY(light.x + 290);
 
       // Draw brown rectangle representing railway tie
       const rectWidth = 150;
       const rectHeight = 30;
       ctx.fillStyle = "#6B4C3B";
-      ctx.fillRect(railX - rectWidth / 2, y - 25, rectWidth, rectHeight);
+      ctx.fillRect(railX - rectWidth / 2, railY - 25, rectWidth, rectHeight);
 
       // Draw two small squares inside the rectangle
       const squareSize = 35;
@@ -1792,10 +2084,10 @@ function drawTrainTrafficLights(ctx, camX, canvasWidth) {
       ctx.fillStyle = "#333"; // darker brown for squares
 
       // Left square
-      ctx.fillRect(railX - gap - squareSize / 2, y - 25, squareSize, squareSize);
+      ctx.fillRect(railX - gap - squareSize / 2, railY - 25, squareSize, squareSize);
 
       // Right square
-      ctx.fillRect(railX + gap - squareSize / 2, y - 25, squareSize, squareSize);
+      ctx.fillRect(railX + gap - squareSize / 2, railY - 25, squareSize, squareSize);
     
   });
 }
@@ -2313,14 +2605,14 @@ let aiBusSpawned = false; // Prevent multiple spawns
 const aiCars = []; // All dumb cars
 const STUCK_CAR_PROBABILITY = 0.2; // 20% chance it's a stuck car
 const MAX_CAR_SPEED = 7.5;
-
+const bridges = []
 function spawnAICar(x, y) {
   const stuck = Math.random() < STUCK_CAR_PROBABILITY;
   const hateBuses = Math.random() < 0.5;
 
   aiCars.push({
     x,
-    y,
+    y: getRoadY(x), // Set initial y correctly
     speed: stuck ? 0 : 3 + Math.random() * (MAX_CAR_SPEED - 3),
     stuck,
     hateBuses,
@@ -2329,11 +2621,14 @@ function spawnAICar(x, y) {
 }
 
 const BUS_SPACING_SEC = 30;      // 20 seconds between buses schedule offsets
-const IDEAL_SPEED = 150;         // px per second (5000 px in 25 seconds)
+const IDEAL_SPEED = 200;         // px per second (5000 px in 25 seconds)
 
 function updateAICars(bus) {
   for (let i = aiCars.length - 1; i >= 0; i--) {
     const car = aiCars[i];
+    
+    // NEW: Update car's Y position to follow the road
+    car.y = getRoadY(car.x);
 
     if (car.stuck) continue;
 
@@ -2371,10 +2666,6 @@ let raceTimer = 0;
 
 // Config Constants
 const MAX_AI_SPEED = 11;
-const MIN_DISTANCE = 530;
-const BEEP_INTERVAL = 30;
-const GO_AROUND_DISTANCE = 1600;
-const GO_AROUND_SPEED = 25;
 const RANDOM_STOP_PROBABILITY = 0.002;
 const RANDOM_STOP_DURATION = 300;
 
@@ -2387,9 +2678,6 @@ const PASS_TOLERANCE_MS = 5000;
 const SPEED_PX_PER_MS = IDEAL_SPEED; // alias for clarity
 
 
-// Global timing
-const startTime = performance.now();
-
 
 // Map to store each bus's schedule offset (in ms)
 const scheduleOffsets = new Map();
@@ -2398,8 +2686,8 @@ const scheduleOffsets = new Map();
  * Assign schedule offsets:
  * - Player bus = 0 offset (base schedule)
  * - AI buses staggered ahead and behind by 20s intervals
- *   e.g. first AI bus 20s behind, second 20s ahead,
- *        third 40s behind, fourth 40s ahead, etc.
+ * e.g. first AI bus 20s behind, second 20s ahead,
+ * third 40s behind, fourth 40s ahead, etc.
  * @param {Object} playerBus
  * @param {Array} aiBuses
  */
@@ -2516,33 +2804,100 @@ function getNearestAIBuses(playerX) {
   return { behind, ahead };
 }
 // === Constants ===
-const MAX_SPEED_BUFFER = 5;
-const TOLERANCE_SEC = 10;
+const IDEAL_SPACING = 7000; // px between ideal points of buses
 const MAX_CATCHUP_SPEED_BOOST = 7;
-const MAX_LATE_SPEED_BOOST = 12;
-const EARLY_OFFSET_SEC = 10;
-const aiBusCount = 8;
-const idealSpeedPerMs = IDEAL_SPEED / 1000;
+const SAFE_FOLLOW_DISTANCE = 200; // px
+const PATIENCE_FRAMES = 30;
+const MAX_BUS_SPEED = 300;
 
-// aiBusCount buses excluding playerBus
-// Define exact spawn positions in pixels for each bus individually (length = aiBusCount excluding player)
+const aiBusCount = 4; // example count excluding player
+
+// Player bus ideal is 0px at start, moves at IDEAL_SPEED
+// AI buses ideal points spaced +/- 7000 px from 0 (player bus ideal)
 const aiBusSpawnPositions = [
-  -16700,
-  -16000,
-  -11000,
-  -5500,
-  5500,
-  10000,
-  16000,  
-  22500,
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ];
 
-// Corresponding schedule offsets in milliseconds (must match spacing to keep them on schedule)
+// Calculate schedule offsets for AI buses based on their ideal positions
+const idealSpeedPerMs = IDEAL_SPEED / 1000;
 const aiBusScheduleOffsetsMs = aiBusSpawnPositions.map(
-  pos => -pos / idealSpeedPerMs  // inverse of startX = -offsetMs * idealSpeedPerMs => offsetMs = -startX / idealSpeedPerMs
+  pos => -pos / idealSpeedPerMs
 );
 
-// Spawn AI buses with your custom start positions and offsets
+// Spawn AI buses with custom start positions and schedule offsets
 aiBuses.length = 0;
 scheduleOffsets.clear();
 
@@ -2551,155 +2906,263 @@ for (let i = 0; i < aiBusSpawnPositions.length; i++) {
   const offsetMs = aiBusScheduleOffsetsMs[i];
 
   const aiBus = createAIBus(startX);
-  aiBus.maxSpeed = 12;
-  aiBus.randomStopTimer = 0;
-  aiBus.bypassProgress = 0;
+  aiBus.maxSpeed = MAX_BUS_SPEED;
   aiBus.state = "follow";
+  aiBus.bypassProgress = 0;
   aiBus.beepTimer = 0;
   aiBus.lingerTimer = 0;
-  aiBus.x = startX;
   aiBus.vx = 0;
+  aiBus.x = startX;
+  aiBus.personality = null;
 
   aiBuses.push(aiBus);
   scheduleOffsets.set(aiBus, offsetMs);
 }
 
-// Constants for mode probabilities and timings
-const MODE_SWITCH_CHANCE_PER_FRAME = 0.001; // ~0.1% chance per frame to switch mode
-const LONG_STOP_PROBABILITY = 0.002; // Probability to start a long stop for Stop-and-Go buses
-const LONG_STOP_DURATION_FRAMES = 100; // 5 seconds at 60fps
-const SAFE_FOLLOW_DISTANCE = 200; // min px distance to keep from bus ahead
-const PATIENCE_FRAMES = 30;       // wait 1 second before accelerating after stop
-// === AI Bus Update with Late and Stopper Buses ===
-// === AI Bus Update with Multiple Behaviors ===
-function updateAIBuses(deltaTime, playerBus) {
-  const elapsedTime = performance.now() - startTime;
+// === Main AI Bus Update Loop ===
+// New constants for smarter control
 
-  for (const bus of aiBuses) {
-    // Assign bus behavior once
-    if (!bus.behavior) {
-      const roll = Math.random();
-      if (roll < 0.2) bus.behavior = "alwaysLate";      // 10-20s late
-      else if (roll < 0.5) bus.behavior = "stopper";    // speeds but lingers long
-      else if (roll < 0.8) bus.behavior = "earlyBird";  // tries to be slightly early
-      else bus.behavior = "normal";                     // default catch-up
-      bus.lingerTimer = 0;
-      bus.visitedStops = new Set();
-    }
+const MAX_LATE_SPEED_BOOST = 15;
+const MAX_SPEED_BUFFER = 5;
+const MAX_ACCELERATION = 3;
+const STOP_WAIT_SEC = 5; // seconds
+const EARLY_OFFSET_SEC = 10;
+// Global variable to track which bus has the forced slow hold turn
+// --- REQUIRED GLOBAL CONSTANTS ---
+const MAX_ACCEL = 4;                // px/s per second
+const MAX_BRAKE = 1.5;                // px/s per second
+const MIN_FOLLOW_DIST = 400;          // px
+const CRITICAL_STOP_DIST = 100;       // px
+const STOP_WAIT_TIME = 8.0;           // seconds
+const SCHEDULE_TOLERANCE_SEC = 2.0;   // seconds
+const MIN_BUS_SPEED = 18.0;            // px/s
+const BEEP_INTERVAL = 30;             // frames
+const MIN_DISTANCE = 100;             // px (collision distance to player)
+const GO_AROUND_SPEED = 18;           // px/s
+const GO_AROUND_DISTANCE = 500;       // px
+const STOP_DETECTION_RANGE = 20;      // px
+let forcedEarlyStopTurn = 0;
+// --- CRITICAL GLOBAL CONSTANTS ---
+// IDEAL_SPEED must be defined elsewhere globally (px/second)
+// =================================================================
+// === CONFIGURATION CONSTANTS =====================================
+// =================================================================
+const IDEAL_BUS_SPEED = (typeof IDEAL_SPEED !== 'undefined' && isFinite(IDEAL_SPEED) && IDEAL_SPEED > 0) ? IDEAL_SPEED : 20;
 
-    // === 1. Schedule following ===
+
+// NOTE: these accelerations are px/sec^2 — increased so buses actually accelerate noticeably.
+const ACCELERATION    = 200.0;   // px/s^2  (much snappier acceleration)
+const DECELERATION    = 500.0;   // px/s^2  (strong braking)
+const STOP_WAIT_TIME_SEC = 5.0;  // seconds dwell at stop
+const STOP_SLOW_DISTANCE  = 400; // pixels start braking
+const FALLBACK_DELTA_TIME = 0.033; // seconds (~30 FPS)
+
+// --- Schedule / randomness
+const SCHEDULE_P_FACTOR_CORRECTED = 0.015; // proportional gain for lateness
+const MAX_SPEED_VARIATION = 0.20;         // random cruising speed diversity (slightly larger)
+const TOLERANCE_SEC = 5;                  // "on time" band
+const STOP_TOLERANCE = 5;                 // px accuracy for stopping
+
+// global storage (define before running update loops)
+// example: scheduleOffsets.set(bus, randomOffsetMs);
+
+// =================================================================
+// === HELPER FUNCTIONS ============================================
+// =================================================================
+
+/**
+ * Ideal position minus actual position.
+ * > 0  => late (behind schedule)
+ * < 0  => early (ahead of schedule)
+ */
+function getLateness(bus, elapsedTime) {
     const offsetMs = scheduleOffsets.get(bus) ?? 0;
-    let idealX = IDEAL_SPEED * ((elapsedTime - offsetMs) / 1000);
+    const idealX   = IDEAL_BUS_SPEED * ((elapsedTime - offsetMs) / 1000);
+    return idealX - (bus.x || 0);
+}
 
-    // Behavior adjustments
-    if (bus.behavior === "alwaysLate") {
-      idealX -= 5000 + Math.random() * 10000; // 10-20 sec late
-    } else if (bus.behavior === "earlyBird") {
-      idealX += 5000 + Math.random() * 2000; // 3-5 sec early
-    }
+/**
+ * Find the closest AI buses behind and ahead of the player.
+ */
+function getNearestAIBuses(playerX) {
+    let behind = null, ahead = null;
+    let minBehindDist = Infinity, minAheadDist = Infinity;
 
-    const dx = idealX - bus.x;
-    let targetSpeed = dx * 0.02; // proportional catch-up
-    targetSpeed += (Math.random() - 0.5) * 0.2; // small wiggle
-    targetSpeed = Math.max(0, Math.min(bus.maxSpeed, targetSpeed));
-
-    // === 2. Stopper / LazyCollector / random stops ===
-    let shouldStop = false;
-    for (const stop of stops) {
-      const distToStop = Math.abs(bus.x - stop.x);
-      if (!bus.visitedStops.has(stop) && distToStop < 50) {
-        if (bus.behavior === "stopper") {
-          bus.lingerTimer = 300 + Math.floor(Math.random() *300) //10-20 sec linger
-        } else if (bus.behavior === "lazyCollector") {
-          bus.lingerTimer = 200 + Math.floor(Math.random() * 300);
-        } else if (bus.behavior === "normal" && Math.random() < 0.5) {
-          bus.lingerTimer = 200 + Math.floor(Math.random() * 200) ;
+    for (const bus of aiBuses) {
+        const dx = bus.x - playerX;
+        if (dx < 0 && Math.abs(dx) < minBehindDist) {
+            behind = bus;
+            minBehindDist = Math.abs(dx);
+        } else if (dx > 0 && dx < minAheadDist) {
+            ahead = bus;
+            minAheadDist = dx;
         }
-        bus.visitedStops.add(stop);
-        shouldStop = true;
-        stop.collected = true
-        break;
-      }
     }
-
-    if (bus.lingerTimer > 0) {
-      bus.vx = 0;
-      bus.lingerTimer--;
-    } else if (!shouldStop) {
-      bus.vx += (targetSpeed - bus.vx) * 0.1; // smooth accel/decel
-    }
-
-    // === 3. Following + overtaking ===
-    let nearestAhead = null;
-    let minDist = Infinity;
-    for (const other of aiBuses) {
-      if (other === bus) continue;
-      const dist = other.x - bus.x;
-      if (dist > 0 && dist < minDist) {
-        minDist = dist;
-        nearestAhead = other;
-      }
-    }
-
-    if (nearestAhead && minDist < 200) {
-      bus.vx *= 0.8; // slow down if too close
-      if (Math.random() < 0.1) {
-        bus.vx = bus.maxSpeed * (1.1 + Math.random() * 0.2); // overtaking burst
-      }
-    }
-
-    // === 4. Move bus ===
-    bus.x += bus.vx;
-  }
+    return { behind, ahead };
 }
+
+/**
+ * Add natural randomness to make buses imperfect.
+ * Small ± value is added to speed every frame.
+ */
+function randomSpeedJitter() {
+    // jitter as a small fraction of ideal speed (± ~2.5% of IDEAL_BUS_SPEED)
+    return (Math.random() - 0.5) * IDEAL_BUS_SPEED * 0.05;
+}
+
+// =================================================================
+// === MAIN UPDATE LOOP ============================================
+// =================================================================
+function updateAIBuses(deltaTime, playerBus) {
+    // Robust deltaTime handling:
+    // - Accepts deltaTime in ms (typical) OR in seconds (some callers pass seconds).
+    // - If deltaTime looks like seconds (< 0.5), treat as seconds directly.
+    let safeDeltaTime;
+    if (!isFinite(deltaTime) || deltaTime <= 0) {
+        safeDeltaTime = FALLBACK_DELTA_TIME;
+    } else {
+        // if deltaTime < 0.5 assume seconds already; otherwise assume ms and convert
+        safeDeltaTime = (deltaTime > 0 && deltaTime < 0.5) ? deltaTime : (deltaTime / 1000);
+        // clamp small/large values
+        safeDeltaTime = Math.max(1e-4, Math.min(0.2, safeDeltaTime));
+    }
+
+    const elapsedTime = isFinite(performance.now()) ? performance.now() : 0;
+
+    for (let i = 0; i < aiBuses.length; i++) {
+        const bus = aiBuses[i];
+        let targetSpeed = IDEAL_BUS_SPEED;
+
+        // ----- Initialization -----
+        if (!bus.initialized) {
+            // ensure numeric positions
+            bus.x           = isFinite(bus.x) ? bus.x : 0;
+            bus.vx          = isFinite(bus.vx) ? bus.vx : 0;
+            bus.lingerTimer = bus.lingerTimer || 0;
+
+            // a slightly larger persistent cruising variation + random seed for jitter
+            const speedFactor = 1 + (Math.random() * MAX_SPEED_VARIATION * 2) - MAX_SPEED_VARIATION;
+            bus.cruisingSpeed = IDEAL_BUS_SPEED * speedFactor;
+
+            // give initial forward momentum so they actually move immediately
+            bus.vx = Math.max(0, bus.cruisingSpeed * 0.6);
+
+            bus.initialized   = true;
+        }
+
+        // ----- Service Dwell -----
+        if (bus.lingerTimer > 0) {
+            bus.vx = 0;
+            bus.lingerTimer -= safeDeltaTime;
+            if (bus.lingerTimer < 0) bus.lingerTimer = 0;
+            continue;
+        }
+
+        // ----- Schedule Correction -----
+        const latenessPx = getLateness(bus, elapsedTime);
+        let scheduleCorrection = latenessPx * SCHEDULE_P_FACTOR_CORRECTED;
+        const maxCorrection = IDEAL_BUS_SPEED * 0.5;
+        scheduleCorrection = Math.max(-maxCorrection, Math.min(maxCorrection, scheduleCorrection));
+
+        targetSpeed = bus.cruisingSpeed + scheduleCorrection + randomSpeedJitter();
+
+        // ----- Stop Handling -----
+        let nearestStopDist = Infinity;
+        let stopFound = null;
+
+        for (const stop of stops) {
+            if (!stop.collected && isFinite(stop.x)) {
+                const dist = stop.x - bus.x;
+                if (dist > 0 && dist < nearestStopDist) {
+                    nearestStopDist = dist;
+                    stopFound = stop;
+                }
+            }
+        }
+
+        if (stopFound) {
+            if (nearestStopDist < STOP_TOLERANCE) {
+                if (latenessPx < 0) {
+                    // Early arrival → hold briefly to allow schedule to catch up
+                    // give a gentle early hold (not infinite)
+                    bus.lingerTimer = Math.max(bus.lingerTimer, Math.min(STOP_WAIT_TIME_SEC, Math.abs(latenessPx) / Math.max(1, IDEAL_BUS_SPEED) ));
+                    targetSpeed = 0;
+                } else {
+                    // On time / late → service dwell
+                    stopFound.collected = true;
+                    bus.lingerTimer = STOP_WAIT_TIME_SEC;
+                    targetSpeed = 0;
+                }
+            } else if (nearestStopDist < STOP_SLOW_DISTANCE) {
+                // braking: scale down strongly as we approach
+                const brakingFactor = Math.max(0.05, nearestStopDist / STOP_SLOW_DISTANCE);
+                const brakingTarget = IDEAL_BUS_SPEED * brakingFactor * 0.6; // somewhat conservative braking target
+                targetSpeed = Math.min(targetSpeed, brakingTarget);
+            }
+        }
+
+        // ----- Smooth Accel / Brake -----
+        targetSpeed = Math.max(0, Math.min(MAX_BUS_SPEED, targetSpeed));
+        const speedDiff = targetSpeed - bus.vx;
+        const accel = speedDiff > 0
+            ? Math.min(speedDiff, ACCELERATION * safeDeltaTime)
+            : Math.max(speedDiff, -DECELERATION * safeDeltaTime);
+        bus.vx += accel;
+
+        // Hard safety cap
+        bus.vx = Math.max(0, Math.min(MAX_BUS_SPEED, bus.vx));
+
+        // ----- Position Update -----
+        bus.x += bus.vx * safeDeltaTime;
+
+        // Failsafe against NaN or runaway values
+        if (!isFinite(bus.x) || !isFinite(bus.vx) || Math.abs(bus.x) > 1e9) {
+            console.error(`Bus ${i} critical error → reset`);
+            const offsetMs = scheduleOffsets.get(bus) ?? 0;
+            const idealX   = IDEAL_BUS_SPEED * Math.max(0, (elapsedTime - offsetMs) / 1000);
+            bus.x = idealX;
+            bus.vx = Math.max(0, bus.cruisingSpeed || IDEAL_BUS_SPEED * 0.6);
+            bus.lingerTimer = 0;
+        }
+    }
+}
+let velx = vx
+// =================================================================
+// === UI: Lateness Display ========================================
+// =================================================================
 function updateLatenessUI(playerBus) {
-  const elapsedTime = performance.now() - startTime;
+    const elapsedTime = performance.now();
+    const playerLatenessPx = getLateness(playerBus, elapsedTime);
+    const playerLatenessSec = playerLatenessPx / IDEAL_BUS_SPEED;
 
-  // Get lateness in pixels, convert to seconds: px / px-per-second
-  const playerLatenessPx = getLateness(playerBus, elapsedTime);
-  const playerLatenessSeconds = playerLatenessPx / IDEAL_SPEED;
+    const { behind, ahead } = getNearestAIBuses(playerBus.x);
 
-  const { behind, ahead } = getNearestAIBuses(playerBus.x);
+    function latenessToSec(bus) {
+        if (!bus) return null;
+        return getLateness(bus, elapsedTime) / IDEAL_BUS_SPEED;
+    }
 
-  function getLatenessSeconds(bus) {
-    if (!bus) return null;
-    const latenessPx = getLateness(bus, elapsedTime);
-    return latenessPx / IDEAL_SPEED;
-  }
+    function status(seconds) {
+        if (seconds === null) return "N/A";
+        if (Math.abs(seconds) <= TOLERANCE_SEC) return "ON TIME";
+        return seconds > 0 ? "Late" : "Early";
+    }
 
-  function getTimeDiffSeconds(busA, busB) {
-    if (!busA || !busB) return null;
-    const dx = busA.x - busB.x;
-    return dx / IDEAL_SPEED;
-  }
+    function format(seconds) {
+        if (seconds === null) return "N/A";
+        return `${Math.abs(seconds).toFixed(1)}s (${status(seconds)})`;
+    }
 
-  const behindDiff = getTimeDiffSeconds(playerBus, behind);
-  const aheadDiff = getTimeDiffSeconds(ahead, playerBus);
+    const lines = [
+        `Player: ${format(playerLatenessSec)}`,
+        `AI Behind: ${format(latenessToSec(behind))}`,
+        `AI Ahead : ${format(latenessToSec(ahead))}`
+    ];
 
-  // Format the lateness status based on seconds (not pixels)
-  const formatStatus = (seconds) => {
-    if (seconds === null) return "N/A";
-    if (Math.abs(seconds) <= 10) return "ON TIME";
-    return seconds < 0 ? "Late" : "Early";
-  };
-
-  // Format time in seconds with no decimals for cleaner display
-  const formatTime = (seconds) => {
-    if (seconds === null) return "N/A";
-    return `${Math.abs(seconds).toFixed(0)}s ${formatStatus(seconds)}`;
-  };
-
-  const lines = [
-    `Player Lateness: ${formatTime(playerLatenessSeconds)}`,
-    behind ? `AI Bus Behind: ${formatTime(getLatenessSeconds(behind))}` : "AI Bus Behind: N/A",
-    ahead ? `AI Bus Ahead: ${formatTime(getLatenessSeconds(ahead))}` : "AI Bus Ahead: N/A"
-  ];
-
-  const elem = document.getElementById('lateness-info');
-  if (elem) {
-    elem.textContent = lines.join('\n');
-  }
+    const elem = document.getElementById('lateness-info');
+    if (elem) elem.textContent = lines.join('\n');
 }
+
 
 function updateStops(deltaTime) {
   const now = performance.now();
@@ -2716,6 +3179,37 @@ let spawnIndex = 0;
 let spawning = false;
 // Draw a single AI bus
 function drawAIBuses(bus) {
+  // Constants needed for road angle calculation
+  const LOOKAHEAD_DISTANCE = 50; 
+    const ctrlOffset = 30; 
+  
+
+  // --- ROAD ALIGNMENT CALCULATION ---
+  // 1. Find the road Y position at the center of the bus
+  const busCenterXWorld = bus.x + bus.width / 2;
+  const roadYBusCenter = getRoadY(busCenterXWorld); 
+  
+  // 2. Find the road Y position slightly ahead to determine the slope (angle)
+  const roadYAhead = getRoadY(busCenterXWorld + LOOKAHEAD_DISTANCE);
+  
+  // 3. Calculate the slope and angle
+  const roadSlope = (roadYBusCenter - roadYAhead) / LOOKAHEAD_DISTANCE;
+  const roadAngleRad = Math.atan(roadSlope);
+  
+  // 4. Determine the new top-Y coordinate so the bus bottom rests on the road surface
+  const adjustedBusTopY = roadYBusCenter - bus.height;
+
+  // The on-screen center point for the rotation transformation
+  const rotationCenterX = bus.x - camX + bus.width / 2;
+  const rotationCenterY = adjustedBusTopY + bus.height / 2;
+  
+  // Local drawing variables, now aligned to the road
+  const leftX = bus.x - camX;
+  const rightX = leftX + bus.width;
+  const topY = adjustedBusTopY; 
+  const bottomY = topY + bus.height;
+  // ------------------------------------
+
   const typeIndex = bus.typeIndex;
 
   // Optional green path for type 1 or 2
@@ -2723,30 +3217,26 @@ function drawAIBuses(bus) {
 
   ctx.save();
 
-  // Transform setup (no tilt here)
-  ctx.translate(bus.x - camX + bus.width / 2, bus.y + bus.height / 2);
-  ctx.translate(-(bus.x - camX + bus.width / 2), -(bus.y + bus.height / 2));
+  // --- ROTATION TRANSFORMATION: Tilt the bus to match the road angle ---
+  ctx.translate(rotationCenterX, rotationCenterY);
+  ctx.rotate(-roadAngleRad); // Rotate against the slope
+  ctx.translate(-rotationCenterX, -rotationCenterY);
 
   // Bus gradient
   const x0 = bus.x - camX;
-  const y0 = bus.y + bus.height;
+  const y0 = bottomY; // Use road-aligned bottom Y
   const x1 = bus.x - camX + bus.width;
-  const y1 = bus.y;
+  const y1 = topY; // Use road-aligned top Y
 
   const busGradient = ctx.createLinearGradient(x0, y0, x1, y1);
   busGradient.addColorStop(0, '#555');
   busGradient.addColorStop(1, '#222');
 
-  const leftX = bus.x - camX;
-  const rightX = leftX + bus.width;
-  const topY = bus.y;
-  const bottomY = bus.y + bus.height;
-  const ctrlOffset = 30;
-
   // Type-specific shapes
   if (typeIndex === 2) {
     ctx.save();
-    ctx.translate(0, bus.y + 20);
+    // Corrected Y translation from bus.y + 20 to topY + 20
+    ctx.translate(0, topY + 20); 
     ctx.scale(1, -1);
     const startX = leftX;
     const startY = 10;
@@ -2767,7 +3257,8 @@ function drawAIBuses(bus) {
 
   if (typeIndex === 1) {
     ctx.save();
-    ctx.translate(0, bus.y + 20);
+    // Corrected Y translation from bus.y + 20 to topY + 20
+    ctx.translate(0, topY + 20);
     ctx.scale(1, -1);
     const startX = leftX + 53;
     const startY = 20;
@@ -2812,7 +3303,7 @@ function drawAIBuses(bus) {
   bus.doorPositions.forEach(doorX => {
     if (typeIndex === 2 && doorX === 430) return; // skip special case
     const x = bus.x - camX + doorX;
-    const y = bus.y + 40;
+    const y = topY + 40; // Corrected Y reference
     ctx.fillRect(x, y, bus.doorSize.width, bus.doorSize.height);
   });
   ctx.restore();
@@ -2820,7 +3311,7 @@ function drawAIBuses(bus) {
   // Special door for type 2
   if (typeIndex === 2) {
     const doorX = bus.x - camX + 450;
-    const y = bus.y + 40;
+    const y = topY + 40; // Corrected Y reference
     ctx.save();
     ctx.translate(0, y + bus.doorSize.height);
     ctx.scale(1, -1);
@@ -2840,7 +3331,7 @@ function drawAIBuses(bus) {
   if (bus.backDoorPositions) {
     bus.backDoorPositions.forEach(doorX => {
       const x = bus.x - camX + doorX;
-      const y = bus.y + 40;
+      const y = topY + 40; // Corrected Y reference
       const doorW = bus.doorSize.width;
       const doorH = bus.doorSize.height;
 
@@ -2855,37 +3346,38 @@ function drawAIBuses(bus) {
       // Bottom half: darker bus body
       const busGradient = ctx.createLinearGradient(
         bus.x - camX,
-        bus.y + bus.height,
+        bottomY, // Use road-aligned bottom Y
         bus.x - camX + bus.width,
-        bus.y
+        topY // Use road-aligned top Y
       );
-      for (const stop of gradientStops) {
-        busGradient.addColorStop(stop.offset, stop.color);
-      }
+      // NOTE: gradientStops variable is undefined in this snippet, using a default setup here.
+      busGradient.addColorStop(0, '#555');
+      busGradient.addColorStop(1, '#222');
       ctx.fillStyle = busGradient;
       ctx.fillRect(x, y + topHeight, doorW, doorH / 3);
     });
   }
 
   // Windows helper
-  function drawWindow(win) {
+  function drawWindow(win, baseTopY) { // Added baseTopY parameter
     ctx.save();
     const gradient = ctx.createLinearGradient(0, 0, 0, win.height);
     gradient.addColorStop(0, 'rgba(30, 30, 30, 1)');
     gradient.addColorStop(1, 'rgba(30, 30, 30, 1)');
     ctx.fillStyle = gradient;
-    ctx.fillRect(bus.x - camX + win.x, bus.y + win.y, win.width, win.height);
+    // Use baseTopY instead of bus.y
+    ctx.fillRect(bus.x - camX + win.x, baseTopY + win.y, win.width, win.height); 
     ctx.restore();
   }
 
-  drawWindow(bus.window);
-  drawWindow(bus.window2);
+  drawWindow(bus.window, topY); // Pass the road-aligned topY
+  drawWindow(bus.window2, topY); // Pass the road-aligned topY
 
   // Wheels
   bus.wheelOffsets.forEach(offset => {
     ctx.save();
     const wheelX = bus.x - camX + offset;
-    const wheelY = bus.y + bus.height;
+    const wheelY = bottomY; // Corrected Y reference (wheels sit on the bottom)
     ctx.translate(wheelX, wheelY);
     ctx.rotate(bus.wheelAngle);
 
@@ -2914,10 +3406,6 @@ function drawAIBuses(bus) {
 
   ctx.restore();
 }
-
-// Add event listener for spawning AI bus
-
-
 function drawParallaxLayers(ctx, camX, time = 0) {
   backgroundLayers.forEach(layer => {
     layer.objects.forEach(obj => {
@@ -2989,6 +3477,10 @@ function drawParallaxLayers(ctx, camX, time = 0) {
     });
   });
 }
+let isLeftSignalOn, isHazardOn, isRightSignalOn, isFlashing = false
+   const LEFT_SIGNAL_CENTER = { x: 0, y: 0 };
+    const HAZARD_CENTER = { x: 0, y: 0 };
+    const RIGHT_SIGNAL_CENTER = { x: 0, y: 0 };
 
 // Generate objects remains mostly the same, with named buildings assigned
 function generateParallaxObjects() {
@@ -3005,7 +3497,7 @@ function generateParallaxObjects() {
         variant = i;
         width = 100 + Math.random() * 300;
         height = 180 + Math.random() * 320;
-        y = canvas.height - 140 - height;
+        y = getRoadY(x) - height - 20; // Position buildings relative to road
 
         if (Math.random() < 0.15) {  // Reduced chance for named buildings
           name = namedBuildings[Math.floor(Math.random() * namedBuildings.length)];
@@ -3021,16 +3513,17 @@ function generateParallaxObjects() {
         variant = i % 20 === 0 ? 'special' : Math.floor(Math.random() * 6);
         width = 100 + Math.random() * 30;
         height = 180 + Math.random() * 40;
-        y = groundY - height;
+        y = getRoadY(x) - height; // Position trees on the road level
       }
 
       if (layer.type === 'car') {
         width = 70 + Math.random() * 40;
         height = 25;
-        y = canvas.height - 100 - height;
+        y = getRoadY(x) - height;
       }
 
       if (layer.type === 'cloud') {
+        
         width = 120 + Math.random() * 100;
         height = 50;
         y = Math.random() * 200 + 40;
@@ -3142,32 +3635,173 @@ window.addEventListener('keydown', (e) => {
 });
 let canSwitchLane = true;
 
+// =====================================================================
+// !! PLACE THIS CODE OUTSIDE THE drawBus FUNCTION !!
+// =====================================================================
+const BUS_HEIGHT_OFFSET = 180; // Distance from bus top to the road surface
+const LOOKAHEAD_DISTANCE = 50; // Distance to sample road for slope calculation (in px)
+
+// A simple pseudorandom number generator for deterministic terrain based on x.
+function seededRandom(seed) {
+    const x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+}
+
+// This function calculates the screen Y coordinate of the road surface at a world X coordinate.
+function getRoadY(x) {
+    // Assuming 'canvas', 'bridges', and 'canvasHeight' are globally accessible
+    const canvas = document.getElementById('busCanvas');
+    const BASE_ROAD_Y = canvas.height - 100; // Y for the flat road base
+    
+    let totalOffset = 0;
+
+    // --- 1. Gentle, Long-Wavelength Curves (Primary Terrain Shape) ---
+    // These waves create the main, smooth rolling hills.
+    
+    // Component A: Very long, very shallow wave for a subtle overall rise/fall (Max Amplitude 30)
+    const curveOffsetA = Math.sin(x * 0.0002) * 30; 
+    
+    // Component B: Medium-length, smooth curve (Max Amplitude 45)
+    const curveOffsetB = Math.sin(x * 0.0006 + 2) * 45; 
+    
+    // Component C: A slight, choppy wave for just a bit of texture (Max Amplitude 10)
+    const curveOffsetC = Math.sin(x * 0.003) * 10;
+    
+    let combinedHills = curveOffsetA + curveOffsetB + curveOffsetC;
+
+    // --- Enforce Flatter/Above Surface Bias ---
+    // This shifts the lowest point of the combined wave upward, 
+    // ensuring the road rarely dips significantly below the BASE_ROAD_Y.
+    combinedHills += 10; // Guarantees a slight elevation bias.
+    
+    totalOffset += combinedHills;
+
+    // --- 2. Smoothed Random Noise (Controlled Randomness) ---
+    // Adds small, non-repeating variations, but keeps it very smooth.
+    const segmentSize = 800; // Large segments for smooth transitions
+    const maxRandomElevation = 15; // Low max elevation for gentle bumps
+    
+    const segmentIndex = Math.floor(x / segmentSize);
+    const localX = x % segmentSize;
+    const nextSegmentIndex = segmentIndex + 1;
+
+    const randomElevation = (seededRandom(segmentIndex * 123.45) * 2 - 1) * maxRandomElevation;
+    const nextElevation = (seededRandom(nextSegmentIndex * 123.45) * 2 - 1) * maxRandomElevation;
+    
+    // Cosine interpolation for extremely smooth transition
+    const alpha = (1 - Math.cos(Math.PI * (localX / segmentSize))) / 2; 
+    
+    const interpolatedElevation = randomElevation * (1 - alpha) + nextElevation * alpha;
+
+    totalOffset += interpolatedElevation * 0.15; // Apply only 15% of the noise strength
+
+    // --- 3. Bridge Elevation (High Priority) ---
+    // Retains the bridge structure, overriding the smooth terrain below.
+    let bridgeOffset = 0;
+    for (const bridge of bridges) {
+        const liftSpan = 2000; 
+        const maxLift = 100; 
+        if (x >= bridge.x - liftSpan / 2 && x <= bridge.x + liftSpan / 2) {
+            const relativeX = x - bridge.x;
+            const normalizedX = relativeX / (liftSpan / 2); 
+            const parabolicLift = maxLift * (1 - normalizedX * normalizedX);
+            bridgeOffset = -parabolicLift; 
+            
+            // If we are on a bridge, the bridge dictates the height completely.
+            return BASE_ROAD_Y + bridgeOffset; 
+        }
+    }
+    
+    // Final road height is the base Y plus the terrain offset.
+    return BASE_ROAD_Y + totalOffset;
+}
+window.onkeydown = (e) => {
+    // Prevents the function from running multiple times if a key is held down
+    if (e.repeat) return; 
+    
+    const key = e.key.toUpperCase();
+
+    if (key === 'Y') { // Left Signal
+        // If hazards are on, turn them off and start the left signal
+        if (isHazardOn) {
+            isHazardOn = false;
+            isLeftSignalOn = true;
+            isRightSignalOn = false;
+        } else if (isLeftSignalOn) {
+            // If already on, turn off
+            isLeftSignalOn = false;
+        } else {
+            // Turn on left signal and ensure right is off
+            isLeftSignalOn = true;
+            isRightSignalOn = false;
+        }
+    } else if (key === 'R') { // Right Signal
+        // If hazards are on, turn them off and start the right signal
+        if (isHazardOn) {
+            isHazardOn = false;
+            isRightSignalOn = true;
+            isLeftSignalOn = false;
+        } else if (isRightSignalOn) {
+            // If already on, turn off
+            isRightSignalOn = false;
+        } else {
+            // Turn on right signal and ensure left is off
+            isRightSignalOn = true;
+            isLeftSignalOn = false;
+        }
+    } else if (key === 'T') { // Hazard
+        // Toggle hazard state
+        isHazardOn = !isHazardOn;
+        // Hazards take priority: if hazards are turned on, turn off both signals
+        if (isHazardOn) {
+            isLeftSignalOn = false;
+            isRightSignalOn = false;
+        }
+    }
+};
+// =====================================================================
 function drawBus() {
   const skygradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
   if (night) {
-    skygradient.addColorStop(0, '#0b0c17');  // very dark blue/black
-    skygradient.addColorStop(1, '#000000');  // black
+    skygradient.addColorStop(0, '#0b0c17');  
+    skygradient.addColorStop(1, '#000000');  
   } else {
-    skygradient.addColorStop(0, '#87ceeb');  // day sky blue
-    skygradient.addColorStop(1, '#b0e0e6');  // lighter blue
+    skygradient.addColorStop(0, '#87ceeb');  
+    skygradient.addColorStop(1, '#b0e0e6');  
   }
 
 
   const baseBus = buses[currentBusIndex];
   const bus = { ...baseBus };
+  
+  // =======================================================
+  // ** DYNAMIC HILL/BRIDGE Y-LOGIC **
+  // =======================================================
+  
+  const roadYCenter = getRoadY(camX); 
+  const roadYAhead = getRoadY(camX + LOOKAHEAD_DISTANCE);
+  
+  const roadSlope = (roadYCenter - roadYAhead) / LOOKAHEAD_DISTANCE;
+  const roadAngleRad = Math.atan(roadSlope);
+  
+  let playerBusTopY = roadYCenter - BUS_HEIGHT_OFFSET;
+  
   if (vx === 0) {
-    bus.y += isLowered ? LOWER_OFFSET : 0;
+    playerBusTopY += isLowered ? LOWER_OFFSET : 0;
   }
-
-window.addEventListener("keydown", (e) => {
-  if (e.key.toLowerCase() === "w" && blockedByCar && canSwitchLane) {
-    bus.y += 10;
-    canSwitchLane = false;
-
-    // prevent repeated lane switching
-    setTimeout(() => (canSwitchLane = true), 300); 
-  }
-});
+  
+  bus.y = playerBusTopY; 
+  
+  // =======================================================
+  
+  
+  window.addEventListener("keydown", (e) => {
+    if (e.key.toLowerCase() === "w" && blockedByCar && canSwitchLane) {
+      bus.y += 10;
+      canSwitchLane = false;
+      setTimeout(() => (canSwitchLane = true), 300); 
+    }
+  });
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -3179,25 +3813,90 @@ ctx.shadowBlur = 12;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   // Parallax Background
   drawParallaxLayers(ctx, camX);
-// 1. Sidewalk (opposite side)
-ctx.fillStyle = '#bbb';
-ctx.fillRect(0, canvas.height - 140, canvas.width, 40);
 
-// 2. Perpendicular roads cutting into sidewalk
-// 3. Main horizontal road (on top of sidewalk & perp roads)
+// 1., 2., 3. Fixed road drawing removed here.
+
+// =================================================================
+// ** NEW: DRAW DYNAMIC CURVED ROAD SURFACE AND SIDEWALK **
+// =================================================================
+const roadDrawingStep = 10;
+const roadDrawingWidth = canvas.width + 200;
+// Calculate the world coordinates visible on screen plus a buffer
+const roadStartWorld = camX - canvas.width / 2;
+const roadEndWorld = camX + canvas.width / 2 + roadDrawingWidth; 
+const roadBottomY = canvas.height; // Road fills down to the canvas bottom
+
+// --- 3. Draw Road Bed (The main black surface) ---
 ctx.fillStyle = '#333';
-ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-
-ctx.strokeStyle = '#FFD700';
-ctx.lineWidth = 4;
-
 ctx.beginPath();
-ctx.moveTo(0, canvas.height - 85);
-ctx.lineTo(canvas.width, canvas.height - 85);
-ctx.stroke();
+ctx.moveTo(0, roadBottomY); // Start at bottom-left of screen
 
-drawAllIntersections(ctx, camX, bus);  // this should draw the perpendicular roads and buildings
-  drawAICars(ctx)
+// Trace the top of the road curve (road surface Y)
+for (let x = roadStartWorld; x < roadEndWorld; x += roadDrawingStep) {
+    const screenX = x - camX + canvas.width / 2;
+    const roadSurfaceY = getRoadY(x); // This is the curved top line
+    ctx.lineTo(screenX, roadSurfaceY - 80);
+}
+
+ctx.lineTo(canvas.width, roadBottomY); // Move to bottom-right of screen
+ctx.closePath();
+ctx.fill();
+
+// --- 1. Draw Sidewalk (On top of the road surface curve, opposite side) ---
+const sidewalkHeight = 10;
+const sidewalkColor = '#bbb';
+const sidewalkOffsetFromRoad = 45; 
+
+ctx.fillStyle = sidewalkColor;
+ctx.beginPath();
+
+// Trace the top of the sidewalk (40px above the road surface curve)
+for (let x = roadStartWorld; x < roadEndWorld; x += roadDrawingStep) {
+    const screenX = x - camX + canvas.width / 2;
+    const sidewalkTopY = getRoadY(x) - sidewalkOffsetFromRoad - sidewalkHeight; 
+    
+    if (x === roadStartWorld) {
+        ctx.moveTo(screenX, sidewalkTopY - 30);
+    } else {
+        ctx.lineTo(screenX, sidewalkTopY - 30);
+    }
+}
+
+// Now trace the bottom of the sidewalk (along the road curve)
+for (let x = roadEndWorld - roadDrawingStep; x >= roadStartWorld; x -= roadDrawingStep) {
+    const screenX = x - camX + canvas.width / 2;
+    const sidewalkBottomY = getRoadY(x) - sidewalkOffsetFromRoad; 
+    ctx.lineTo(screenX, sidewalkBottomY);
+}
+
+ctx.closePath();
+ctx.fill();
+// =================================================================
+
+
+// =================================================================
+// ** DRAW DYNAMIC ROAD CURVE (Center Line) **
+// =================================================================
+ctx.strokeStyle = '#FFD700'; // Gold color
+ctx.lineWidth = 4;
+ctx.beginPath();
+const roadLineWidth = canvas.width + 200; 
+const roadStep = 10; 
+const roadCenterLineOffset = 15; // Still offsets the yellow line slightly from the very top surface
+
+for (let x = camX - canvas.width / 2; x < camX + canvas.width / 2 + roadLineWidth; x += roadStep) {
+    const screenX = x - camX + canvas.width / 2;
+    const roadSurfaceY = getRoadY(x) - roadCenterLineOffset; 
+    
+    if (x === camX - canvas.width / 2) {
+        ctx.moveTo(screenX, roadSurfaceY);
+    } else {
+        ctx.lineTo(screenX, roadSurfaceY);
+    }
+}
+ctx.stroke();
+// =================================================================
+
 // Parameters for highway curve
 const highway = {
   baseY: canvas.height - 600,  // vertical position of highway deck
@@ -3275,24 +3974,40 @@ for (const bridge of bridges) {
 
 }
 
-
+// =======================================================
+// ** START: MAIN BUS ROTATION BLOCK **
+// This applies the tilt to the entire bus, body, and all features.
+// =======================================================
 ctx.save();
-// Apply tilt
- const busGradient = ctx.createLinearGradient(
+
+// Calculate the center point for rotation
+const busCenterX = bus.x - camX + bus.width / 2;
+const busCenterY = bus.y + bus.height / 2;
+
+// Apply rotation
+ctx.translate(busCenterX, busCenterY);
+ctx.rotate(-roadAngleRad); // Use the calculated road angle for tilt
+ctx.translate(-busCenterX, -busCenterY);
+
+// --- Gradient for Bus Body ---
+const busGradient = ctx.createLinearGradient(
   bus.x - camX,
   bus.y + bus.height,
   bus.x - camX + bus.width,
   bus.y
 );
+for (const stop of gradientStops) {
+    busGradient.addColorStop(stop.offset, stop.color);
+}
+
+
+// --- 1. Bus Type 2 Specific Piece (Inverted Draw) ---
 if (currentBusIndex === 2) {
   ctx.save();
-
-  // Flip vertically around a horizontal axis at Y = flipY
   const flipY = bus.y + 20;
   ctx.translate(0, flipY);
   ctx.scale(1, -1);
 
-  // Calculate drawing origin
   const startX = bus.x - camX + bus.width - 470;
   const startY = 10;
 
@@ -3305,9 +4020,7 @@ if (currentBusIndex === 2) {
   ctx.lineTo(startX, startY);
   ctx.closePath();
 
-  // === Fill style logic ===
-  const useGradient = true; // 🔁 Change to false if you want solidColor
-
+  const useGradient = true; 
   if (useGradient) {
     const curveGradient = ctx.createLinearGradient(
       bus.x - camX,
@@ -3320,21 +4033,112 @@ if (currentBusIndex === 2) {
     }
     ctx.fillStyle = curveGradient;
   } else {
-    const solidColor = '#444'; //  Replace this if you want a different solid color
-    ctx.fillStyle = solidColor;
+    ctx.fillStyle = '#444';
   }
 
   ctx.fill();
   ctx.restore();
 }
-  for (const stop of gradientStops) {
-    busGradient.addColorStop(stop.offset, stop.color);
-  }
 
-ctx.translate(bus.x - camX + bus.width / 2, bus.y + bus.height / 2);
-ctx.rotate(tilt * Math.PI / 180);
-ctx.translate(-(bus.x - camX + bus.width / 2), -(bus.y + bus.height / 2));
+// --- 2. Bus Type 1 Large Light Gray Flipped Piece (RESTORED) ---
+if (currentBusIndex === 1) {
+    ctx.save();
+    
+    // Apply local flip transform. Coordinates must be relative to the rotated canvas space.
+    const flipY = bus.y + 20;
+    ctx.translate(0, flipY);
+    ctx.scale(1, -1); // Flip vertically
 
+    // Use absolute screen coordinates for drawing the flipped shape
+    const startX = bus.x - camX + bus.width - 417; 
+    const startY = 20;
+
+    ctx.beginPath();
+    
+    // Vertical line down (originally 60 px tall, now 42 px)
+    ctx.moveTo(startX - 50, startY);
+    ctx.lineTo(startX - 50, startY + 42);
+
+    // Adjusted horizontal line length and curve details
+    const totalHorizontalLength = 102.4 * 1.3; 
+    const lineStartX = startX - 50;
+    const lineY = startY + 42;
+
+    // Part 1: straight horizontal line
+    const part1Length = totalHorizontalLength * 0.4; 
+    ctx.lineTo(lineStartX + part1Length, lineY);
+
+    // Part 2: curve down 10px with quadratic curve
+    const part2Length = totalHorizontalLength * 0.2;
+    const curveControlX = lineStartX + part1Length + part2Length/2; 
+    const curveControlY = lineY + 10;
+    const curveEndX = lineStartX + part1Length + part2Length;
+    const curveEndY = lineY + 10;
+    
+    ctx.quadraticCurveTo(curveControlX, curveControlY, curveEndX, curveEndY);
+
+    // Part 3: straight horizontal line
+    ctx.lineTo(lineStartX + totalHorizontalLength, lineY + 10);
+
+    // Diagonal line \ 
+    const angleDeg = 75;
+    const angleRad = angleDeg * Math.PI / 180;
+    const length = 30 * 1.5 * (42 / 60); 
+
+    const dx = Math.cos(angleRad) * length;
+    const dy = Math.sin(angleRad) * length;
+
+    ctx.lineTo(startX + dx, startY + 59 + dy); 
+
+    // Close shape top, scale closing length horizontally
+    ctx.lineTo(startX + 170 * 1.1, startY); 
+    ctx.lineTo(startX, startY);
+
+    ctx.closePath();
+
+    ctx.fillStyle = 'rgba(211, 211, 211, 1)'; // Light Gray
+    ctx.fill();
+
+    ctx.restore(); // Restore local flip transform
+}
+
+// --- 3. Bus Type 1 Small Dark Flipped Piece ---
+if (currentBusIndex === 1) {
+    ctx.save();
+    
+    // Apply local flip transform.
+    const anchorX = bus.x - camX + bus.width - 35;
+    const anchorY = bus.y + 20; 
+    
+    ctx.translate(anchorX, anchorY);
+    ctx.scale(1, -1); 
+
+    const startY = -120; 
+    
+    ctx.beginPath();
+    ctx.moveTo(0, startY);
+    ctx.lineTo(0, startY + 100);
+    ctx.lineTo(0, startY + 100); 
+    
+    ctx.quadraticCurveTo(
+      30, 
+      startY + 100,  
+      30, 
+      startY + 0    
+    );
+    
+    ctx.lineTo(10, startY);
+    ctx.lineTo(0, startY);
+    ctx.closePath();
+    
+    ctx.fillStyle = 'rgba(30, 30, 30, 1)'; 
+    ctx.fill();
+
+    ctx.restore(); 
+}
+
+
+// --- 4. Bus Body (Main Shape - includes studle) ---
 const leftX = bus.x - camX;
 const rightX = leftX + bus.width;
 const topY = bus.y;
@@ -3342,76 +4146,10 @@ const bottomY = bus.y + bus.height;
 const curveStartY = topY + bus.height * 0.0;
 const curveEndY = topY + bus.height * 0.59;
 const ctrlOffset = 30;
-if (currentBusIndex === 1) {
 
-const flipY = bus.y + 20;
-const startX = bus.x - camX + bus.width - 417;
-const startY = 20;
-
-ctx.save();
-
-ctx.translate(0, flipY);
-ctx.scale(1, -1); // Flip vertically
-
-ctx.beginPath();
-
-// Vertical line down (originally 60 px tall, now 42 px)
-ctx.moveTo(startX - 50, startY);
-ctx.lineTo(startX - 50, startY + 42);
-
-// Adjusted horizontal line length and curve details
-const totalHorizontalLength = 102.4 * 1.3; // 133 px
-
-const lineStartX = startX - 50;
-const lineY = startY + 42;
-
-// Break down horizontal length into parts
-const part1Length = totalHorizontalLength * 0.8;  // 40% straight
-const part2Length = totalHorizontalLength * 0.2;  // 20% curved down 10 px
-const part3Length = totalHorizontalLength * 0.8;  // 40% straight again
-
-// Part 1: straight horizontal line (40%)
-ctx.lineTo(lineStartX + part1Length, lineY);
-
-// Part 2: curve down 10px with quadratic curve (20%)
-const curveControlX = lineStartX + part1Length + 30;
-const curveControlY = lineY + 10;
-const curveEndX = lineStartX + part1Length + part2Length - 0;
-const curveEndY = lineY + 10;
-
-ctx.quadraticCurveTo(curveControlX, curveControlY, curveEndX, curveEndY);
-
-// Part 3: straight horizontal line (40%) from curve end to total length, 10 px lower
-ctx.lineTo(lineStartX + totalHorizontalLength, lineY + 10);
-
-// Diagonal line \ with length scaled proportionally to vertical height
-
-const angleDeg = 75;
-const angleRad = angleDeg * Math.PI / 180;
-
-// Original length was 30, scaled 1.5 = 45 px for 60 px height
-// New length scales proportionally: 45 * (42 / 60) = 31.5 px approx
-const length = 30 * 1.5 * (42 / 60); // ~31.5 px
-
-const dx = Math.cos(angleRad) * length;
-const dy = Math.sin(angleRad) * length;
-
-ctx.lineTo(startX + dx, startY + 59 + dy);
-
-// Close shape top, scale closing length horizontally
-ctx.lineTo(startX + 170 * 1.1, startY); // 169 px
-ctx.lineTo(startX, startY);
-
-ctx.closePath();
-
-ctx.fillStyle = 'rgba(211, 211, 211, 1)';
-ctx.fill();
-
-ctx.restore();
-}
 // Length of the bottom-right diagonal (studle)
 const studleHeight = 10;
-const studleAngleX = 45; // small inward angle
+const studleAngleX = 45; 
 
 ctx.beginPath();
 ctx.moveTo(leftX, topY);
@@ -3437,161 +4175,194 @@ ctx.closePath();
 
 ctx.fillStyle = busGradient;
 ctx.fill();
-ctx.restore();
 
-  // --- Doors ---
-  // === 1. UNIVERSAL DOOR GRADIENT DRAWING ===
+
 ctx.save();
+let doorWellX, doorWellWidth;
+const doorWellY = bus.y + 40;
+const doorWellHeight = bus.doorSize.height;
+if (currentBusIndex !== 2) {
+    // Standard Bus (Bus 0, 1) - Based on the first door position, covering two panels and a small gap.
+    const frontDoorStart = buses[currentBusIndex].doorPositions[0] - 0;
+    doorWellX = bus.x - camX + frontDoorStart;
+    // Assuming the front door opening is roughly two standard door panels wide
+    doorWellWidth = (bus.doorSize.width * 2) - 5; 
 
-// Door gradient
+} else {
+    // Bus 2 (Curved Door) - Based on the location of the curved door mechanism (starting near 430).
+    // Covering the left panel (width 20) + curved area.
+    const curvedDoorStart = 405;
+    doorWellX = bus.x - camX + curvedDoorStart;
+    doorWellWidth = bus.doorSize.width + 10;
+}
+
+// Draw the solid black box behind where the doors open
+ctx.fillStyle = "#000000"; // Black color for the interior
+ctx.fillRect(doorWellX, doorWellY, doorWellWidth, doorWellHeight);
+
 const doorGradient = ctx.createLinearGradient(0, 0, 0, bus.doorSize.height);
 doorGradient.addColorStop(0, 'rgba(40, 40, 40, 1)');
 doorGradient.addColorStop(1, 'rgba(40, 40, 40, 1)');
 ctx.fillStyle = doorGradient;
 
-buses[currentBusIndex].doorPositions.forEach(doorX => {
-  // Skip door 430 if it's bus 2 (we’ll draw that separately with curve)
-  if (currentBusIndex === 2 && doorX === 430) return;
+const doorOffset = frontOpen; // Animation value from the update loop (0 to 100)
 
-  const x = bus.x - camX + doorX;
-  const y = bus.y + 40;
-  const doorW = bus.doorSize.width;
-  const doorH = bus.doorSize.height;
+// Standard dimensions
+const doorTotalW = bus.doorSize.width;
+const doorH = bus.doorSize.height;
+const y = bus.y + 40;
+const halfDoorW = doorTotalW;
 
-  ctx.fillRect(x, y, doorW, doorH);
+// The X position of the front door system's left edge (first item in doorPositions)
+// This is used as the common reference point for the door system.
+const frontDoorSystemX = buses[currentBusIndex].doorPositions[0];
+
+// Panel calculations for shrinking
+const openingWidth = doorOffset; // The width of the gap to be revealed (frontOpen)
+let currentPanelW = Math.max(0, halfDoorW - openingWidth / 2); // Shrinking width of each panel
+if (frontOpen) {
+    currentPanelW = 10
+}
+let more = 0
+if (frontOpen) {more = 30}
+// === Standard Bus Doors (Bus 0, 1, etc.) - Two Rectangular Panels ===
+if (currentBusIndex !== 2) {
+    
+    // Only handle the front door system
+    buses[currentBusIndex].doorPositions.forEach((doorX, index) => {
+        if (index > 0) return; // Skip back doors for now (assuming index 0 is the front door system)
+
+        // --- 1. Left Panel (Rectangular) - Shrinks from the right ---
+        let x_left = bus.x - camX + doorX;
+        ctx.fillRect(x_left, y, currentPanelW, doorH);
+
+        // --- 2. Right Panel (Rectangular) - Shifts right and shrinks from the left ---
+        // New X starts after the left panel's original half width plus the gap (openingWidth / 2)
+        let x_right = bus.x - camX + doorX + halfDoorW + more;
+        ctx.fillRect(x_right, y, currentPanelW, doorH);
+    });
+
+} else {
+    // === Bus 2 Special Door - Rectangular Left + Curved Right ===
+    
+    // --- 1. Left Panel (Rectangular) - Always the same width/shrink as the standard left panel ---
+    let x_left = bus.x - camX + frontDoorSystemX;
+    ctx.fillRect(x_left, y, currentPanelW, doorH);
+    
+    // --- 2. Right Panel (Curved) ---
+    
+    // Calculate the start X for the curved door (Right edge of the gap)
+    // This position is the frontDoorSystemX + (Left Half Door W) + (Gap Width)
+    const curved_x_start = bus.x - camX + frontDoorSystemX + halfDoorW + more + 20
+    
+    // Calculate how much the right panel has shrunk from its original width
+    const panelShrinkAmount = (halfDoorW - currentPanelW); 
+
+    // The curved door's shape starts at original doorX + 20 (relative to the bus)
+    const doorX_original_pos = 430; 
+    
+    // This calculates the starting X for the drawing logic, now based on the calculated gap position
+    const x = curved_x_start + 20 - halfDoorW; // Corrected starting point based on geometry
+    
+    ctx.save();
+    ctx.translate(0, y + doorH);
+    ctx.scale(1, -1); 
+    ctx.fillStyle = doorGradient; 
+    
+    ctx.beginPath();
+    ctx.moveTo(x, 0); // Start position after the gap
+    ctx.lineTo(x, doorH);
+    
+    // The end X point needs to move left by the total amount the panel has shrunk (panelShrinkAmount)
+    const doorW_bus2 = bus.doorSize.width - 20; // Original width of the Bus 2 shape before shrinkage
+    const endX = x + doorW_bus2 - panelShrinkAmount; 
+    
+    ctx.lineTo(endX - 10, doorH); 
+    ctx.quadraticCurveTo(
+        endX, doorH,
+        endX, doorH - 100
+    );
+    ctx.lineTo(endX, 0);
+    ctx.closePath();
+
+    ctx.fill();
+    ctx.restore();
+}
+
+ctx.restore();
+
+drawBackDoors(bus);
+
+
+// --- 6. Windows ---
+function drawWindow(window) {
+  ctx.save();
+  const gradient = ctx.createLinearGradient(0, 0, 0, window.height);
+  gradient.addColorStop(0, 'rgba(30, 30, 30, 1)');
+  gradient.addColorStop(1, 'rgba(30, 30, 30, 1)');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(bus.x - camX + window.x, bus.y + window.y, window.width, window.height);
+  ctx.restore();
+}
+drawWindow(bus.window);
+drawWindow(bus.window2);
+
+
+// --- 7. Wheels ---
+bus.wheelOffsets.forEach(offset => {
+  ctx.save();
+  const wheelX = bus.x - camX + offset;
+  let wheelY = bus.y + bus.height; 
+
+  if (driverLocked) {
+    wheelY = wheelY - 10
+  }
+  
+  // The hill rotation is already active. Only apply wheel spin here.
+  ctx.translate(wheelX, wheelY);
+  ctx.rotate(bus.wheelAngle); // Wheel spin animation
+
+  const wheelGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
+  wheelGradient.addColorStop(0, '#393939');
+  wheelGradient.addColorStop(0.5, '#242424');
+  wheelGradient.addColorStop(1, '#101010');
+
+  ctx.beginPath();
+  ctx.arc(0, 0, 30, 0, Math.PI * 2);
+  ctx.fillStyle = wheelGradient;
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.arc(0, 0, 18, 0, Math.PI * 2);
+  ctx.fillStyle = '#999';
+  ctx.fill();
+
+  ctx.save();
+  ctx.translate(-8, -8);
+  ctx.beginPath();
+  ctx.arc(0, 0, 6, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.fill();
+  ctx.restore();
+
+  ctx.restore();
+
+});
+// ** END OF MAIN BUS ROTATION BLOCK **
+ctx.restore(); 
+
+
+// --- Fuel Pickups --- (Drawn outside rotation as they are world objects)
+fuelPickups.forEach(pickup => {
+  if (!pickup.collected) {
+    ctx.fillStyle = 'orange';
+    ctx.fillRect(pickup.x - bus.x + canvas.width / 2 - 10, 400, 20, 20); 
+  }
 });
 
 
-ctx.restore();
-
-// === 2. SPECIAL CURVED DOOR FOR BUS 2 ===
-if (currentBusIndex === 2) {
-  const doorX = 430;
-  const x = bus.x - camX + doorX + 20;
-  const y = bus.y + 40;
-  const doorW = bus.doorSize.width - 20;
-  const doorH = bus.doorSize.height;
-
-  ctx.save();
-  ctx.translate(0, y + doorH);
-  ctx.scale(1, -1); // Flip over X-axis
-  ctx.fillStyle = doorGradient; // use the same gradient
-
-  ctx.beginPath();
-  ctx.moveTo(x, 0);
-  ctx.lineTo(x, doorH);
-  ctx.lineTo(x + doorW - 10, doorH);
-  ctx.quadraticCurveTo(
-    x + doorW, doorH,
-    x + doorW, doorH - 100
-  );
-  ctx.lineTo(x + doorW, 0);
-  ctx.closePath();
-
-  ctx.fill();
-
-
-  ctx.restore();
-}
-if (currentBusIndex === 1) {{
-const flipY = bus.y + 20;
-ctx.translate(0, flipY);
-ctx.scale(1, -1);
-
-const startX = bus.x - camX + bus.width - 35;
-const startY = -120;
-
-ctx.beginPath();
-ctx.moveTo(startX, startY);
-ctx.lineTo(startX, startY + 100);
-
-// Make horizontal segment shorter (e.g., 220px instead of 370)
-ctx.lineTo(startX + 0, startY + 100);
-
-// Adjust curve control point (was +440)
-ctx.quadraticCurveTo(
-  startX + 30, // control X
-  startY + 100,  // control Y
-  startX + 30, // end X
-  startY + 0    // end Y
-);
-
-// Adjust closing top line (was +300)
-ctx.lineTo(startX + 10, startY);
-ctx.lineTo(startX, startY);
-ctx.closePath();
-
-ctx.fillStyle = 'rgba(30, 30, 30, 1)';
-ctx.fill();
-
-ctx.restore();
-}
-}
-
-drawBackDoors(bus);
-  // --- Windows ---
-  function drawWindow(window) {
-    ctx.save();
-    const gradient = ctx.createLinearGradient(0, 0, 0, window.height);
-    gradient.addColorStop(0, 'rgba(30, 30, 30, 1)');
-    gradient.addColorStop(1, 'rgba(30, 30, 30, 1)');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(bus.x - camX + window.x, bus.y + window.y, window.width, window.height);
-  }
-
-  drawWindow(bus.window);
-  drawWindow(bus.window2);
-
-
-
-  // --- Fuel Pickups ---
-  fuelPickups.forEach(pickup => {
-    if (!pickup.collected) {
-      ctx.fillStyle = 'orange';
-      ctx.fillRect(pickup.x - bus.x + canvas.width / 2 - 10, 400, 20, 20);
-    }
-  });
-ctx.restore();
-  // --- Wheels ---
-  const wheelOffsetY = tilt * 0.2;
-  bus.wheelOffsets.forEach(offset => {
-    ctx.save();
-    const wheelX = bus.x - camX + offset;
-    let wheelY = bus.y + bus.height + wheelOffsetY;
-    if (driverLocked) {
-      wheelY = wheelY - 10
-    }
-    ctx.translate(wheelX, wheelY);
-    ctx.rotate(bus.wheelAngle);
-
-    const wheelGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
-    wheelGradient.addColorStop(0, '#393939');
-    wheelGradient.addColorStop(0.5, '#242424');
-    wheelGradient.addColorStop(1, '#101010');
-
-    ctx.beginPath();
-    ctx.arc(0, 0, 30, 0, Math.PI * 2);
-    ctx.fillStyle = wheelGradient;
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(0, 0, 18, 0, Math.PI * 2);
-    ctx.fillStyle = '#999';
-    ctx.fill();
-
-    ctx.save();
-    ctx.translate(-8, -8);
-    ctx.beginPath();
-    ctx.arc(0, 0, 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fill();
-    ctx.restore();
-
-    ctx.restore();
-    drawTrainTrafficLights(ctx, camX, canvas.width);
-
-  });
 aiBuses.forEach(aiBus => drawAIBuses(aiBus, aiBus.typeIndex));
+// ... (rest of the non-bus drawing logic, UI, and debug info) ...
 
 window.addEventListener('keydown', (e) => {
   if (e.key.toLowerCase() === 'v' && !spawning) {
@@ -3611,8 +4382,7 @@ window.addEventListener('keydown', (e) => {
 });
 
 
-
-  for (const stop of stops) {
+for (const stop of stops) {
   if (stop.isStation && stop.x > bus.x - 2000) {
     drawTransitStation(ctx, stop.x, camX);
   }
@@ -3630,65 +4400,224 @@ for (const bridge of bridges) {
   ctx.fillStyle = '#CAB298'; // dark brown top rectangle
   ctx.fillRect(screenX - 125, 40, 590, 100);
 }
-// Full width brown bar at bottom, fixed to screen width
+// --- DRAW INDICATOR HELPER FUNCTION ---
+// NOTE: This must be defined globally or before the main drawing logic.
+function drawSquareIndicator(x, y, config, isFlashing) {
+    const isActive = config.active;
+    // Check if the light is one of the interactive signals (which must blink)
+    const isInteractive = !!config.type; 
+    
+    // Light is ON if it's active AND (it's not interactive OR the global flasher is currently ON)
+    const isLit = isActive && (isInteractive ? isFlashing : true);
+    
+    ctx.save();
+    
+    if (isLit) {
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+        ctx.shadowColor = config.glowColor;
+        ctx.shadowBlur = 15;
+        ctx.fillStyle = config.baseColor;
+    } else {
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#404040'; // Darker gray when off
+    }
 
-const barY = 550;
-const barHeight = 100;
-const barX = 0;
-const barWidth = canvas.width;  // Full canvas width
+    ctx.fillRect(x, y, LIGHT_SIZE, LIGHT_SIZE);
+    ctx.restore();
+}
 
-ctx.fillStyle = '#999'; // dark brown bar color
-ctx.fillRect(barX, barY, barWidth, barHeight);
+// --- Dashboard Geometry Constants (Half-Circle) ---
+const DASH_CENTER_X = canvas.width / 2;
+const DASH_CENTER_Y = 650; 
+const DASH_RADIUS = 180; 
 
-// Labels and their glow colors
-const labels = [
-  { label: 'Stop Nearby', active: distance < 1000, glowColor: 'rgba(100, 150, 255, 0.7', circleColor: '#337BFF' },           
-  {label: 'Stop Requested', active: pendingDropRequest, glowColor: 'rgba(255, 165, 0, 0.8)', circleColor: '#FFA500' },
-  { label: 'Air Brakes', active: braking, glowColor: 'rgba(163, 217, 165, 0.8)', circleColor: '#A3D9A5' },
-  { label: 'Stopped', active: vx === 0, glowColor: 'rgba(221, 0, 0, 0.7)', circleColor: '#DD0000' }                    
-];
+const LIGHT_SIZE = 12; 
+const LIGHT_PADDING = 8; 
 
-ctx.font = '10px Arial';
-ctx.textAlign = 'center';
+// --- Dashboard Background (Half-Circle) ---
+ctx.save();
+ctx.beginPath();
+ctx.arc(DASH_CENTER_X, DASH_CENTER_Y, DASH_RADIUS, Math.PI, 2 * Math.PI, false);
+ctx.closePath();
+ctx.fillStyle = '#1e1e1e'; 
+ctx.fill();
+ctx.restore();
 
-// Vertical positions for text (label above, status below)
-const labelY = barY + 10;
-const statusY = barY + 25;
-const panelX = 35
-const panelY = statusY + 85
-// Horizontal spacing
-const segmentWidth = barWidth / labels.length;
+// --- LIGHT CONFIGURATION ---
+// These rely on global variables: vx, distance, braking, pendingDropRequest
+  // VELOCITY METER CONSTANTS (Defined locally for clarity)
+  const METER_RADIUS = DASH_RADIUS - 30; 
+  const MAX_VELOCITY = 50; // Max speed for the gauge 
+  const MIN_ANGLE = Math.PI + (Math.PI / 8); 
+  const MAX_ANGLE = 2 * Math.PI - (Math.PI / 8); 
+  const ANGLE_RANGE = MAX_ANGLE - MIN_ANGLE;
 
-labels.forEach((item, i) => {
-  const centerX = segmentWidth * i + segmentWidth / 2;
-
-  // Label text (smaller, above)
-  ctx.fillStyle = '#ccc';
-  ctx.fillText(item.label, centerX, labelY);
-
-  // Status indicator: circle with glow if active, gray if not
+  // 1. Draw Meter Track (The background arc)
   ctx.save();
-  if (item.active) {
-    ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 0;
-    ctx.shadowColor = item.glowColor;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = item.circleColor;
-  } else {
-    ctx.shadowColor = 'transparent';
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#888'; // gray when off
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 15;
+  ctx.beginPath();
+  ctx.arc(DASH_CENTER_X, DASH_CENTER_Y, METER_RADIUS, MIN_ANGLE, MAX_ANGLE, false);
+  ctx.stroke();
+
+  // 2. Draw Velocity Ticks and Labels
+  ctx.font = '12px Arial';
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+
+  for (let i = 0; i <= MAX_VELOCITY; i += 10) {
+      const angle = MIN_ANGLE + (i / MAX_VELOCITY) * ANGLE_RANGE;
+      const x = DASH_CENTER_X + METER_RADIUS * Math.cos(angle);
+      const y = DASH_CENTER_Y + METER_RADIUS * Math.sin(angle);
+      
+      // Draw the label
+      ctx.fillText(i, x, y + 5); 
+
+      // Draw a small tick mark
+      const tickOuterX = DASH_CENTER_X + (METER_RADIUS - 10) * Math.cos(angle);
+      const tickOuterY = DASH_CENTER_Y + (METER_RADIUS - 10) * Math.sin(angle);
+      
+      ctx.beginPath();
+      ctx.moveTo(tickOuterX, tickOuterY);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
   }
 
-  ctx.beginPath();
-  ctx.arc(centerX, statusY, 12, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-  // Reset font to default for next iteration
-  ctx.font = '10px Arial';
+  // 3. Draw Needle
+  ctx.save();
+
+
+// Local variable for drawing speed
+const velx = vx * 2; // Use the global velocity variable
+
+// --- VELOCITY METER CONSTANTS ---
+const LINE_WIDTH = 15; // Width of the meter track
+
+// --- 1. Draw Static Meter Track (Full Arc) ---
+ctx.save();
+ctx.lineWidth = LINE_WIDTH;
+
+// Create the color gradient that spans the entire arc
+const gradient = ctx.createLinearGradient(
+    DASH_CENTER_X - METER_RADIUS, DASH_CENTER_Y,
+    DASH_CENTER_X + METER_RADIUS, DASH_CENTER_Y
+);
+
+// Map the color stops from green (MIN) to red (MAX)
+gradient.addColorStop(0.0, '#00FF00');     // Start (Green - Slow/Safe)
+gradient.addColorStop(0.5, '#FFFF00');     // Mid-point (Yellow - Medium)
+gradient.addColorStop(1.0, '#FF0000');     // End (Red - Fast/Warning)
+
+// Draw the full, color-graded background track
+ctx.strokeStyle = gradient;
+ctx.beginPath();
+ctx.arc(DASH_CENTER_X, DASH_CENTER_Y, METER_RADIUS, MIN_ANGLE, MAX_ANGLE, false);
+ctx.stroke();
+
+
+for (let i = 0; i <= MAX_VELOCITY; i += 10) {
+    const angle = MIN_ANGLE + (i / MAX_VELOCITY) * ANGLE_RANGE;
+    const x = DASH_CENTER_X + METER_RADIUS * Math.cos(angle);
+    const y = DASH_CENTER_Y + METER_RADIUS * Math.sin(angle);
+    
+    // Draw the label
+    ctx.fillText(i, x, y + 5); 
+    ctx.strokeStyle = '#000000'; // Set border color to black
+    ctx.lineWidth = 3;           // Set border thickness
+    ctx.strokeText(i, x, y + 5); // Draw the black outline first
+    
+    // Draw a small tick mark
+    const tickOuterX = DASH_CENTER_X + (METER_RADIUS - 10) * Math.cos(angle);
+    const tickOuterY = DASH_CENTER_Y + (METER_RADIUS - 10) * Math.sin(angle);
+    
+    ctx.beginPath();
+    ctx.moveTo(tickOuterX, tickOuterY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+        
+    // Draw the label
+    ctx.fillText(i, x, y + 5); 
+    ctx.strokeStyle = '#000000'; // Set border color to black
+    ctx.lineWidth = 3;           // Set border thickness
+    ctx.strokeText(i, x, y + 5); // Draw the black outline first
+        
+    // Draw the label (fill)
+    ctx.fillStyle = '#fff';      // Set fill color to white
+    ctx.fillText(i, x, y + 5); 
+
+}
+
+// --- 3. Draw Cover Arc (Grey Out the Unused Portion) ---
+// This technique draws the full color track first, and then overlays a dark grey arc
+// from the current speed up to the maximum, effectively "filling" the meter.
+
+const currentVel = Math.min(Math.max(velx, 0), MAX_VELOCITY);
+const velocityRatio = currentVel / MAX_VELOCITY;
+const currentAngle = MIN_ANGLE + (velocityRatio * ANGLE_RANGE);
+
+// Draw a dark grey arc from the current speed up to the max speed
+ctx.strokeStyle = '#404040'; // Dark grey to cover the unused part
+ctx.lineWidth = LINE_WIDTH;
+ctx.beginPath();
+ctx.arc(DASH_CENTER_X, DASH_CENTER_Y, METER_RADIUS, currentAngle, MAX_ANGLE, false);
+ctx.stroke();
+
+ctx.restore(); // Restore context
+
+// --- 4. Display Current Speed Text (Kept for clarity) ---
+ctx.font = '24px Arial';
+ctx.fillStyle = '#FFD700';
+ctx.textAlign = 'center';
+ctx.fillText(`${Math.round(currentVel)}`, DASH_CENTER_X, DASH_CENTER_Y - 20);
+// These rely on global variables: isLeftSignalOn, isRightSignalOn, isHazardOn
+const interactiveLights = [
+  { active: isLeftSignalOn || isHazardOn, glowColor: 'rgba(0, 255, 0, 0.7)', baseColor: '#00FF00', type: 'LEFT_SIGNAL' },
+  { active: isHazardOn, glowColor: 'rgba(255, 255, 0, 0.7)', baseColor: '#FFFF00', type: 'HAZARD' },
+  { active: isRightSignalOn || isHazardOn, glowColor: 'rgba(0, 255, 0, 0.7)', baseColor: '#00FF00', type: 'RIGHT_SIGNAL' }
+];
+const coreLights = [
+  { active: distance < 1000, glowColor: 'rgba(100, 150, 255, 0.7)', baseColor: '#337BFF' },
+  { active: pendingDropRequest, glowColor: 'rgba(255, 165, 0, 0.8)', baseColor: '#FFA500' },
+  { active: braking, glowColor: 'rgba(163, 217, 165, 0.8)', baseColor: '#A3D9A5' },
+  { active: vx === 0, glowColor: 'rgba(221, 0, 0, 0.7)', baseColor: '#DD0000' }
+];
+
+// 1. Draw Core Status Lights (Top Row)
+const CORE_LIGHT_Y = DASH_CENTER_Y - DASH_RADIUS + 70;
+let coreX = DASH_CENTER_X - ((coreLights.length * LIGHT_SIZE) + ((coreLights.length - 1) * LIGHT_PADDING)) / 2;
+
+coreLights.forEach((light) => {
+    drawSquareIndicator(coreX, CORE_LIGHT_Y, light, isFlashing);
+    coreX += LIGHT_SIZE + LIGHT_PADDING;
 });
 
+// 2. Draw Interactive Signal Lights (Bottom Row)
+const INTERACTIVE_LIGHT_Y = CORE_LIGHT_Y + LIGHT_SIZE + LIGHT_PADDING * 1.5;
+let interactiveX = DASH_CENTER_X - ((interactiveLights.length * LIGHT_SIZE) + ((interactiveLights.length - 1) * LIGHT_PADDING)) / 2;
 
+interactiveLights.forEach((light) => {
+    const x = interactiveX;
+    const y = INTERACTIVE_LIGHT_Y;
+
+    drawSquareIndicator(x, y, light, isFlashing);
+    
+    // CRUCIAL: UPDATE COORDINATES FOR CLICK HANDLER (Needed for canvas.onclick)
+    const lightCenterY = y + LIGHT_SIZE / 2;
+    const lightCenterX = x + LIGHT_SIZE / 2;
+    
+    if (light.type === 'LEFT_SIGNAL') { LEFT_SIGNAL_CENTER.x = lightCenterX; LEFT_SIGNAL_CENTER.y = lightCenterY; }
+    if (light.type === 'HAZARD') { HAZARD_CENTER.x = lightCenterX; HAZARD_CENTER.y = lightCenterY; }
+    if (light.type === 'RIGHT_SIGNAL') { RIGHT_SIGNAL_CENTER.x = lightCenterX; RIGHT_SIGNAL_CENTER.y = lightCenterY; }
+
+    interactiveX += LIGHT_SIZE + LIGHT_PADDING;
+});
+
+ctx.font = '14px Arial';
 
   const now = performance.now();
   const deltaTime = now - lastDrawTime;
@@ -3726,7 +4655,7 @@ for (const stop of stops) {
   }
 }
 for (const stop of stops) {
-  if (!stop.collected && vx === 0 && Math.abs(bus.x - stop.x) < STOP_DETECTION_RANGE) {
+  if (!stop.collected && vx === 0 && Math.abs(bus.x - stop.x) < 500 && frontOpen) {
     
     // Special stop check
     if (stop.special && !driverLocked) continue;
@@ -3739,17 +4668,16 @@ for (const stop of stops) {
     const basePoints = newPassengers;
     const multiplier = stop.special ? 3 : 1;
     const actualPoints = basePoints * multiplier;
-
+      points += actualPoints;
     if (passengersOnBoard < 16) {
       passengersOnBoard += newPassengers;
-      points += actualPoints;
-      savePoints();
     } else {
       passengersOnBoard -= 6;
     }
-
+      savePoints();
     if (passengersOnBoard >= 4) {
       passengersOnBoard = Math.max(passengersOnBoard - dropOff, 0);
+      points = dropOff * 3 + points
     }
 
     // Clear drop request
@@ -3783,42 +4711,6 @@ for (const stop of stops) {
   }
 }
 
-
-ctx.fillStyle = '#f0f0f0';
-ctx.strokeStyle = '#333';
-ctx.lineWidth = 2;
-ctx.fillRect(panelX, panelY, 180, 190);
-ctx.strokeRect(panelX, panelY, 180, 190);
-
-
-labels.forEach((item, i) => {
-  const boxY = panelY + 10 + i * 45;
-
-  ctx.save();
-  ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-  ctx.shadowBlur = 6;
-  ctx.shadowOffsetX = 2;
-  ctx.shadowOffsetY = 2;
-
-  ctx.fillStyle = item.color;
-  ctx.beginPath();
-  ctx.moveTo(panelX + 16, boxY);
-  ctx.lineTo(panelX + 34, boxY);
-  ctx.quadraticCurveTo(panelX + 40, boxY, panelX + 40, boxY + 6);
-  ctx.lineTo(panelX + 40, boxY + 18);
-  ctx.quadraticCurveTo(panelX + 40, boxY + 24, panelX + 34, boxY + 24);
-  ctx.lineTo(panelX + 16, boxY + 24);
-  ctx.quadraticCurveTo(panelX + 10, boxY + 24, panelX + 10, boxY + 18);
-  ctx.lineTo(panelX + 10, boxY + 6);
-  ctx.quadraticCurveTo(panelX + 10, boxY, panelX + 16, boxY);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-
-  ctx.fillStyle = 'black';
-  ctx.font = '12px Arial';
-  ctx.fillText(item.label, panelX + 60, boxY + 18);
-});
 
 
 // --- Request Drop at Future Stop ---
@@ -3999,6 +4891,7 @@ drawBus()
       drawBus();
     }
   });
+  
   let highFriction = false;
 function drawBackDoors(bus) {
   if (!bus.backDoorPositions) return;
@@ -4220,13 +5113,88 @@ function checkBusBlockedByCars() {
     }
   }
 }
+
+    // --- KEYBOARD HANDLER (R, T, Y for controls) ---
+    window.onkeydown = (e) => {
+        if (e.repeat) return; 
+        
+        const key = e.key.toUpperCase();
+
+        if (key === 'Y') { // Left Signal
+            if (isHazardOn) {
+                isHazardOn = false;
+                isLeftSignalOn = true;
+                isRightSignalOn = false;
+            } else if (isLeftSignalOn) {
+                isLeftSignalOn = false;
+            } else {
+                isLeftSignalOn = true;
+                isRightSignalOn = false;
+            }
+        } else if (key === 'R') { // Right Signal
+            if (isHazardOn) {
+                isHazardOn = false;
+                isRightSignalOn = true;
+                isLeftSignalOn = false;
+            } else if (isRightSignalOn) {
+                isRightSignalOn = false;
+            } else {
+                isRightSignalOn = true;
+                isLeftSignalOn = false;
+            }
+        } else if (key === 'T') { // Hazard
+            isHazardOn = !isHazardOn;
+            if (isHazardOn) {
+                isLeftSignalOn = false;
+                isRightSignalOn = false;
+            }
+        }
+    };
+    
+    // --- CLICK HANDLER (For interacting with the dashboard directly) ---
+    canvas.onclick = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const clickX = e.clientX - rect.left;
+        const clickY = e.clientY - rect.top;
+
+        const checkClickArea = (center) => {
+            const dx = clickX - center.x;
+            const dy = clickY - center.y;
+            return (dx * dx + dy * dy) < ((radius + 5) * (radius + 5)); 
+        };
+
+        // Reuse key logic for clicks
+        if (checkClickArea(LEFT_SIGNAL_CENTER)) {
+            window.onkeydown({ key: 'Y', repeat: false });
+        } else if (checkClickArea(RIGHT_SIGNAL_CENTER)) {
+            window.onkeydown({ key: 'R', repeat: false });
+        } else if (checkClickArea(HAZARD_CENTER)) {
+            window.onkeydown({ key: 'T', repeat: false });
+        }
+    };
 let t = true
 function animate(timestamp) {
+          // 1. BLINKING UPDATE: Toggles the global flasher every 400ms
+      isFlashing = (timestamp % 600) < 200;
+
   if (!lastTimestamp) lastTimestamp = timestamp; // initialize first frame
   const deltaTime = timestamp - lastTimestamp;
   lastTimestamp = timestamp;
 
   const bus = buses[currentBusIndex];
+
+    // -------------------------------------------------
+    updateFuel(deltaTime, vx);
+    // -------------------------------------------------
+
+
+    // --- Before updating velocity or calling sound functions: ---
+    if (fuelDepleted) {
+      // Freeze movement and sound updates if out of fuel
+      vx = 0; // Stop the bus
+    }
+    // --- End Fuel Depleted Check ---
+
 
   if (!driverLocked) {
     if (accelerating) {
@@ -4238,6 +5206,8 @@ function animate(timestamp) {
         braking = false;
         if (currentBusIndex === 1) {
           acceleration = 0.1;
+        } else if (currentBusIndex === 2) {
+          acceleration = 0.004
         } else {
           acceleration = 0.07;
         }
@@ -4269,15 +5239,15 @@ t = false
     if (key9Pressed) freeCamX += 10; // Move right
     camX = freeCamX;
   } else {
-    if (Math.abs(camFollowX - bus.x) > 100) {
-      camX = bus.x - 100;
+    if (Math.abs(camFollowX - bus.x) > 20) {
+      camX = bus.x - 20;
       camFollowX = bus.x;
       delayTimer = 0;
     } else {
       delayTimer++;
-      if (delayTimer > 120) {
+      if (delayTimer > 20) {
         camFollowX = bus.x;
-        camX += (camFollowX - camX) * 0.05;
+        camX += (camFollowX - camX) * 0.10;
       }
     }
   }
@@ -4289,7 +5259,9 @@ t = false
       Math.abs(train.worldX - track.x) < 100
     )
   );
-
+    if (frontOpen) {
+    accelerating = false
+    vx = 0}
   generateTrainTrafficLights(bus.x);
   updateTrainTrafficLights(deltaTime);
 
