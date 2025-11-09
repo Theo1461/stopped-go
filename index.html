@@ -1433,10 +1433,12 @@ function updateArticulatedAudio() {
     function go() {
                     if (bus.gear === 'DRIVE') {
                 isAccelerating = !isAccelerating
+                isBraking = false
             }
     }
     function stop() {
         isBraking = !isBraking
+        isAccelerating = false
     }
 function e() {
                 if (ctxB) {
