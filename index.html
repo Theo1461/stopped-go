@@ -676,13 +676,12 @@ function generateBusStop() {
         ctx.textAlign = 'center';
         
         const actualSpeedVX = bus.speed * 10;
-        const displaySpeed = Math.round(actualSpeedVX / 2);
+        const displaySpeed = Math.round(actualSpeedVX / 4);
         const center_Y_Position = canvas.height - dashHeight / 2 + 50 
         
         ctx.fillText(displaySpeed.toString().padStart(2, '0'), canvas.width / 2, center_Y_Position);
         
         ctx.font = '16px Inter, sans-serif';
-        ctx.fillText('MPH (VX / 2.5)', canvas.width / 2, center_Y_Position + 15); 
         
         const infoX = canvas.width * 0.75;
         const infoY = canvas.height - dashHeight / 2 - 20;
