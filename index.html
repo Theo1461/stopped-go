@@ -484,7 +484,7 @@ function generateBusStop() {
         const darknessAlpha = startAlpha + (endAlpha - startAlpha) * ratio;
 
         if (darknessAlpha > 0.01) {
-            ctx.fillStyle = `rgba(0, 0, 0, ${darknessAlpha})`;
+            ctx.fillStyle = `rgba(0, 0, 0, 0.3)`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
     }
@@ -744,7 +744,7 @@ function generateBusStop() {
         }
 
         if (fogIntensity > 0.01) {
-            const fogColor = 'rgba(150, 150, 150, ' + fogIntensity + ')'; 
+            const fogColor = 'rgba(150, 150, 150, 0.15)'; 
 
             ctx.fillStyle = fogColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -767,7 +767,7 @@ function generateBusStop() {
         }
 
         if (fogIntensity > 0.01) {
-            const fogColor = 'rgba(150, 150, 150, ' + fogIntensity + ')'; 
+            const fogColor = 'rgba(150, 150, 150, 0.2)'; 
 
             ctx.fillStyle = fogColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
