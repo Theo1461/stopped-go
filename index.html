@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stopped Go Beta 3.0</title>
+    <title>Stopped Go Beta 3.0.5</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body, html {
@@ -35,7 +35,12 @@
 <body class="font-sans">
 
 <canvas id="gameCanvas"></canvas>
-
+<div id="minimapContainer" 
+     style="position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 1000; 
+            width: 300px; height: 100px; border: 2px solid #555; background-color: rgba(0, 0, 0, 0.7); 
+            border-radius: 8px; overflow: hidden;">
+    <canvas id="minimapCanvas" width="300" height="100"></canvas>
+</div>
 <div id="audioOverlay">
     <button id="startButton" class="bg-blue-600 text-white p-4 rounded-xl shadow-xl text-2xl hover:bg-blue-500 transition-colors">
         Start Engine (Click to begin)
@@ -102,8 +107,17 @@
     let blinkerTimer = 0;
     const BLINK_RATE = 0.5;
     let isBusStopNear = false;
+    let ROAD_Y = 0;
     const PROXIMITY_THRESHOLD = 15000;
+// ... existing variables
 
+let trafficLights = [];  // Holds all intersection/traffic light objects
+// Generation tracking (must be separate for staggered generation)
+let furthestLightX = 0;   // Tracks the X-position of the furthest Traffic Light
+const LIGHT_BUFFER_COUNT = 2;  // Number of lights to keep generated ahead
+
+const INTERSECTION_WIDTH = 500; 
+const LIGHT_CYCLE_TIME = 30;
     const TIME_PHASES = ['midnight', 'sunrise', 'morning', 'noon', 'afternoon', 'evening', 'sunset', 'night'];
     let timePhaseIndex = 0;
     let timePhaseTimer = 0;
@@ -122,7 +136,6 @@
     const ROAD_HEIGHT = 40; 
     const SHOULDER_HEIGHT = 20;
     const DASHBOARD_HEIGHT_RATIO = 0.3; 
-    let ROAD_Y = 0; 
 
     const BUS_STOP_WIDTH = 20; 
     const BUS_STOP_HEIGHT = 10; 
@@ -137,7 +150,21 @@
     const MAX_PASSENGERS = 32;
 
     let stopRequested = false; 
+// --- Minimap Variables ---
+    const minimapCanvas = document.getElementById('minimapCanvas');
+    const minimapCtx = minimapCanvas.getContext('2d');
+    const MINIMAP_SCALE = 0.01; // 1 unit distance in game = 0.01 pixel on minimap
+    const MINIMAP_BUS_X = minimapCanvas.width * 0.2; // Bus is fixed at 20% from the left
 
+    // --- Parallax & Scenery Variables ---
+    let clouds = [];
+    let buildings = [];
+    const NUM_CLOUDS = 10;
+    const NUM_BUILDINGS = 15;
+    const MAX_BUILDING_HEIGHT = 150;
+    const MIN_BUILDING_GAP = 50;
+    const MAX_BUILDING_GAP = 200;
+    let totalBuildingDistance = 0;
     let bus = {
         width: 630, 
         height: 300, 
@@ -151,10 +178,12 @@
         neutralFriction: 0.02, 
         gear: 'DRIVE' 
     };
+let MAX_STOP_GAP = 20000
 let lastTime = 0;
 let fps = 0;
 let frameCount = 0;
 let fpsTimer = 0;
+let MIN_STOP_GAP = 10000
     let lineXOffset = 0; 
     const TIRE_DOWN_SHIFT = 25; 
     let busStops = []; 
@@ -208,7 +237,287 @@ function c() {
     const mapRange = (value, fromMin, fromMax, toMin, toMax) => {
         return (value - fromMin) * (toMax - toMin) / (fromMax - fromMin) + toMin;
     };
+    // (Existing resizeCanvas function stays the same)
+
+    function initClouds() {
+        clouds = [];
+        for (let i = 0; i < NUM_CLOUDS; i++) {
+            clouds.push({
+                x: Math.random() * canvas.width * 2,
+                y: Math.random() * (canvas.height * 0.4), // Only top 40% of the screen
+                size: Math.random() * 80 + 40,
+                speed: Math.random() * 0.1 + 0.05,
+                color: `rgba(255, 255, 255, ${Math.random() * 0.3 + 0.4})`
+            });
+        }
+    }
+
+    function initBuildings() {
+        buildings = [];
+        let currentX = 0;
+        const groundY = ROAD_Y + ROAD_HEIGHT; 
+        
+        for (let i = 0; i < NUM_BUILDINGS; i++) {
+            currentX += Math.random() * (MAX_BUILDING_GAP - MIN_BUILDING_GAP) + MIN_BUILDING_GAP;
+
+            const height = Math.random() * (MAX_BUILDING_HEIGHT - 50) + 50;
+            const width = Math.random() * 80 + 40;
+            const color = `hsl(210, 10%, ${Math.random() * 20 + 30}%)`; // Darker blue/grey tones
+
+            buildings.push({
+                x: currentX,
+                width: width,
+                height: height,
+                y: groundY - height,
+                color: color,
+                layer: Math.random() > 0.6 ? 2 : 1 // 2 layers for more depth
+            });
+            currentX += width;
+        }
+        totalBuildingDistance = currentX;
+        
+    }function updateParallax(FRAME_TIME) {
+        // Clouds scroll slower than everything else
+        clouds.forEach(cloud => {
+            cloud.x -= (cloud.speed * bus.speed * FRAME_TIME * 60); 
+            if (cloud.x + cloud.size < 0) {
+                cloud.x = canvas.width + cloud.size; 
+            }
+        });
+        
+        // Buildings scroll at different speeds based on their layer
+        buildings.forEach(building => {
+            const parallaxFactor = building.layer === 1 ? 0.3 : 0.6; // Layer 1 (back) scrolls slower
+            building.x -= (parallaxFactor * bus.speed * FRAME_TIME * 60);
+
+            // Infinite scrolling loop
+            if (building.x + building.width < 0) {
+                // Find the rightmost building to place the new one next to it
+                let maxBuildingX = 0;
+                buildings.forEach(b => {
+                    maxBuildingX = Math.max(maxBuildingX, b.x);
+                });
+                
+                building.x = maxBuildingX + Math.random() * (MAX_BUILDING_GAP - MIN_BUILDING_GAP) + MIN_BUILDING_GAP;
+            }
+        });
+    }
+function drawMinimap() {
+    minimapCtx.clearRect(0, 0, minimapCanvas.width, minimapCanvas.height);
     
+    // 1. Draw Minimap Background (White)
+    minimapCtx.fillStyle = 'white';
+    minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+
+    // Define Road Geometry
+    const roadCenterY = minimapCanvas.height / 2;
+    const roadWidth = 20; 
+    
+    // 2. Draw Minimap Road (Black)
+    minimapCtx.fillStyle = '#111'; // Black road
+    minimapCtx.fillRect(0, roadCenterY - roadWidth / 2, minimapCanvas.width, roadWidth);
+
+    // 3. Draw Bus (Fixed Position, Blue-Purple)
+    const MINIMAP_BUS_X = minimapCanvas.width * 0.25; // Define this if not a global constant
+    const MINIMAP_SCALE = 0.005; // Define this if not a global constant
+    const busLength = 15;
+    const busHeight = roadWidth - 4; 
+    minimapCtx.fillStyle = '#9370DB'; 
+    minimapCtx.fillRect(MINIMAP_BUS_X, roadCenterY - busHeight / 2, busLength, busHeight);
+    
+    // Optional: Draw a line to indicate bus direction/front
+    minimapCtx.fillStyle = 'white';
+    minimapCtx.fillRect(MINIMAP_BUS_X + busLength - 3, roadCenterY - busHeight / 2 + 1, 3, busHeight - 2);
+
+
+    // 4. Draw Traffic Lights (NEW: Red/Yellow/Green Squares)
+    trafficLights.forEach(light => {
+        // Scaling logic: Relative distance from the bus's front, scaled to minimap
+        const relativeDistance = light.x - bus.x; 
+        const minimapX = MINIMAP_BUS_X + (relativeDistance * MINIMAP_SCALE) + (bus.width * MINIMAP_SCALE);
+
+        if (minimapX > 0 && minimapX < minimapCanvas.width) {
+            
+            // Set color based on light state
+            let color;
+            if (light.lightState === 'RED') {
+                color = '#FF4136'; // Red
+            } else if (light.lightState === 'YELLOW') {
+                 color = '#EBEF34'; // Yellow
+            } else {
+                color = '#32CD32'; // Green
+            }
+            
+            minimapCtx.fillStyle = color;
+
+            // Draw a small square marker above the road
+            const markerSize = 5;
+            // Place marker just above the road
+            minimapCtx.fillRect(minimapX - markerSize / 2, roadCenterY - roadWidth / 2 - markerSize, markerSize, markerSize);
+        }
+    });
+
+
+    // 5. Draw Bus Stops (Blue) - Starts here in the original code
+    // ... rest of the bus stops and info drawing code ...
+
+    // 5. Draw Bus Stops (Blue)
+    const PROXIMITY_THRESHOLD = 15000; // Define this if not a global constant
+    busStops.forEach(stop => {
+        // Calculate the stop's position relative to the bus
+        const relativeDistance = stop.x - bus.x; 
+        const minimapX = MINIMAP_BUS_X + (relativeDistance * MINIMAP_SCALE) + (bus.width * MINIMAP_SCALE);
+
+        if (minimapX > 0 && minimapX < minimapCanvas.width) {
+            minimapCtx.fillStyle = '#00BFFF'; // Blue color for stops
+            minimapCtx.strokeStyle = '#00BFFF';
+            minimapCtx.lineWidth = 1;
+
+            // Stop marker (Circle on the side of the road)
+            minimapCtx.beginPath();
+            minimapCtx.arc(minimapX, roadCenterY + roadWidth / 2 + 3, 3, 0, Math.PI * 2); 
+            minimapCtx.fill();
+            
+            // Draw a small line indicating the stop area on the road
+            minimapCtx.fillRect(minimapX - 1, roadCenterY - roadWidth / 2, 2, roadWidth);
+
+            // Draw a yellow outline if the stop is near
+            const distanceToStop = stop.x - (bus.x + bus.width);
+            if (distanceToStop < PROXIMITY_THRESHOLD && distanceToStop > -bus.width) {
+                minimapCtx.strokeStyle = '#EBEF34'; // Yellow proximity indicator
+                minimapCtx.lineWidth = 2;
+                minimapCtx.beginPath();
+                minimapCtx.rect(minimapX - 6, roadCenterY - 10, 12, 20);
+                minimapCtx.stroke();
+            }
+        }
+    });
+    
+    // 6. Draw Info
+    minimapCtx.fillStyle = '#111';
+    minimapCtx.font = '10px Inter, sans-serif';
+    minimapCtx.textAlign = 'center';
+    
+    // Show distance to next stop
+    const nextStopDist = busStops.length > 0 ? busStops[0].x - (bus.x + bus.width) : 'N/A';
+    minimapCtx.fillText(`Next Stop: ${nextStopDist !== 'N/A' ? Math.max(0, Math.round(nextStopDist)) + ' U' : nextStopDist}`, 
+                        minimapCanvas.width / 2, minimapCanvas.height - 5);
+}
+function drawTrafficLights() {
+    trafficLights.forEach(element => {
+        // --- DRAW INTERSECTION ZONE ---
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.3)'; 
+        ctx.fillRect(element.x, ROAD_Y, element.width, ROAD_HEIGHT + SHOULDER_HEIGHT);
+        
+        // 2. Draw Stop Line
+        ctx.fillStyle = 'white';
+        const stopLineX = element.x + 5; 
+        ctx.fillRect(stopLineX, ROAD_Y, 5, ROAD_HEIGHT); 
+
+        // 3. Draw Traffic Light Pole (Vertical Stem |)
+        const poleX = element.x + element.width + 10;
+        const poleBaseY = ROAD_Y + ROAD_HEIGHT + SHOULDER_HEIGHT;
+        const poleHeight = 180; 
+        const poleWidth = 10;
+        
+        ctx.fillStyle = '#555';
+        ctx.fillRect(poleX, poleBaseY - poleHeight, poleWidth, poleHeight);
+        
+        // 4. Draw Angled Arm (The skewed \ section)
+        const armLength = 100;
+        const armHeight = 8;
+        const angleDrop = 15; // Controls the perspective angle
+        
+        const armX = poleX + poleWidth;
+        const armY = poleBaseY - poleHeight - armHeight;
+        
+        // Define the four corners of the skewed trapezoid arm
+        const corners = [
+            { x: armX, y: armY },                       // 1. Top Near
+            { x: armX, y: armY + armHeight },           // 2. Bottom Near
+            { x: armX + armLength, y: armY + armHeight + angleDrop }, // 3. Bottom Far
+            { x: armX + armLength, y: armY + angleDrop }             // 4. Top Far
+        ];
+        
+        ctx.fillStyle = '#555';
+        ctx.beginPath();
+        ctx.moveTo(corners[0].x, corners[0].y);
+        ctx.lineTo(corners[1].x, corners[1].y);
+        ctx.lineTo(corners[2].x, corners[2].y);
+        ctx.lineTo(corners[3].x, corners[3].y);
+        ctx.closePath();
+        ctx.fill();
+
+        // 5. Draw Traffic Light Head (Hanging vertically)
+        const headAttachX = corners[3].x;
+        const lightHeadWidth = 40;
+        const lightHeadHeight = 100;
+        const lightRadius = 10;
+        
+        const headX = headAttachX - lightHeadWidth / 2; 
+        const headY = corners[3].y; 
+        
+        ctx.fillStyle = '#222';
+        ctx.fillRect(headX, headY, lightHeadWidth, lightHeadHeight);
+        
+        const lightColors = {
+            'RED': '#FF4136',
+            'YELLOW': '#EBEF34',
+            'GREEN': '#32CD32'
+        };
+
+        const drawLight = (yOffset, colorName) => {
+            const isActive = element.lightState === colorName;
+            const color = lightColors[colorName];
+            
+            if (isActive) {
+                ctx.shadowColor = color;
+                ctx.shadowBlur = 20;
+                ctx.fillStyle = color;
+            } else {
+                ctx.shadowBlur = 0; 
+                ctx.fillStyle = 'rgba(50, 50, 50, 0.5)';
+            }
+            
+            ctx.beginPath();
+            ctx.arc(headX + lightHeadWidth / 2, headY + yOffset, lightRadius, 0, Math.PI * 2);
+            ctx.fill();
+        };
+
+        const spacing = 30;
+        drawLight(spacing, 'RED');
+        drawLight(spacing + 30, 'YELLOW');
+        drawLight(spacing + 60, 'GREEN');
+    });
+    
+    // Always clear shadows at the end
+    ctx.shadowBlur = 0; 
+    ctx.shadowColor = 'transparent';
+}
+    function drawClouds() {
+        clouds.forEach(cloud => {
+            ctx.fillStyle = cloud.color;
+            ctx.beginPath();
+            ctx.arc(cloud.x, cloud.y, cloud.size * 0.6, 0, Math.PI * 2);
+            ctx.arc(cloud.x + cloud.size * 0.8, cloud.y, cloud.size * 0.5, 0, Math.PI * 2);
+            ctx.arc(cloud.x - cloud.size * 0.5, cloud.y + cloud.size * 0.1, cloud.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+        });
+    }
+
+    function drawBuildings() {
+        // Draw layer 1 (farthest back)
+        buildings.filter(b => b.layer === 1).forEach(building => {
+            ctx.fillStyle = building.color;
+            ctx.fillRect(building.x, ROAD_Y + ROAD_HEIGHT - building.height, building.width, building.height);
+        });
+        
+        // Draw layer 2 (middle ground)
+        buildings.filter(b => b.layer === 2).forEach(building => {
+            ctx.fillStyle = building.color.replace('30%', '40%'); // Slightly lighter for middle layer
+            ctx.fillRect(building.x, ROAD_Y + ROAD_HEIGHT - building.height, building.width, building.height);
+        });
+    }
     function getPhaseDarkness(phase) {
         switch (phase) {
             case 'midnight':
@@ -304,46 +613,166 @@ function c() {
     };
     window.addEventListener('resize', resizeCanvas);
 
+// --- Global Constants for Stop Generation ---
+// This is the minimum number of stops we want to keep generated ahead of the bus
+const STOP_BUFFER_COUNT = 3; 
 
-function generateBusStop() {
-        nextStopDistance -= bus.speed; 
+// This variable will track the X-position of the absolute furthest stop generated
+let furthestStopX = 0;
+function generateNextBusStop() {
+    // 1. Calculate a random gap for the next stop
+    const gap = Math.random() * (MAX_STOP_GAP - MIN_STOP_GAP) + MIN_STOP_GAP;
+    
+    // 2. Update the furthest X position
+    furthestStopX += gap;
+    
+    // 3. Add the new stop to the array
+    busStops.push({
+        x: furthestStopX,
+        passengers: 0 // Keep consistency for future logic
+    });
+    
+    console.log(`Stop generated. New furthest stop is at X: ${furthestStopX}`);
+}
+// Function 3: Generates one new traffic light
+function generateNextTrafficLight() {
+    // Lights can be further apart than stops
+    const MIN_LIGHT_GAP = 20000; 
+    const MAX_LIGHT_GAP = 50000; 
+    
+    const gap = Math.random() * (MAX_LIGHT_GAP - MIN_LIGHT_GAP) + MIN_LIGHT_GAP;
+    furthestLightX += gap;
+    
+    const newLight = {
+        type: 'intersection', 
+        x: furthestLightX,
+        width: INTERSECTION_WIDTH,
+        lightState: Math.random() < 0.5 ? 'GREEN' : 'RED', 
+        lightTimer: Math.random() * LIGHT_CYCLE_TIME,
+        y: ROAD_Y + ROAD_HEIGHT 
+    };
+    
+    trafficLights.push(newLight);
+}
+
+// Function 4: Seeds the lights array
+function initTrafficLights() {
+    furthestLightX = canvas.width * 0.9; // Start even further off-screen 
+    trafficLights = []; 
+    for (let i = 0; i < LIGHT_BUFFER_COUNT; i++) {
+        generateNextTrafficLight(); 
+    }
+}
+// Helper function: Manages the light state (RED, YELLOW, GREEN) based on timer and bus proximity.
+function updateLightState(intersection) {
+    const FRAME_TIME = 1 / 60;
+    // Calculate distance from the bus's front bumper to the intersection's start
+    const distanceToIntersection = intersection.x - (bus.x + bus.width);
+    
+    // Check if the bus is in the dynamic zone (close to the intersection)
+    if (distanceToIntersection < 2000 && distanceToIntersection > -6000) {
         
-        if (nextStopDistance <= 0 && bus.speed > 0.5) {
-            busStops.push({
-                x: canvas.width,
-                width: BUS_STOP_WIDTH,
-                height: BUS_STOP_HEIGHT,
-                y: ROAD_Y + ROAD_HEIGHT + SHOULDER_HEIGHT - BUS_STOP_HEIGHT 
-            });
-            
-            const nextInterval = STOP_INTERVALS[currentIntervalIndex];
+        intersection.lightTimer += FRAME_TIME;
+    }
 
-            nextStopDistance = nextInterval + nextStopDistance;
-            
-            currentIntervalIndex = (currentIntervalIndex + 1) % STOP_INTERVALS.length;
-            
-            console.log(`New Bus Stop spawned. Next interval: ${nextInterval} units.`);
+    // Cycle Logic
+    if (intersection.lightTimer >= LIGHT_CYCLE_TIME) {
+        intersection.lightTimer = 0;
+
+        switch (intersection.lightState) {
+            case 'GREEN':
+                intersection.lightState = 'YELLOW';
+                intersection.lightTimer = 13
+                break;
+            case 'YELLOW':
+                intersection.lightState = 'RED';
+                intersection.lightTimer = 2
+                break;
+            case 'RED':
+                intersection.lightState = 'GREEN';
+                break;
         }
     }
-    function updateBusStops() {
-        isBusStopNear = false;
+}// Main Traffic Light Update function, now structurally aligned with updateBusStops().
+function updateTrafficLights() {
+    // 1. Handle Light State Updates
+    trafficLights.forEach(updateLightState);
+    
+    for (let i = trafficLights.length - 1; i >= 0; i--) {
+        const element = trafficLights[i];
         
-        for (let i = busStops.length - 1; i >= 0; i--) {
-            const stop = busStops[i];
-            stop.x -= bus.speed; 
+        // 1. Scroll the light
+        element.x -= bus.speed; 
+        
+        // 2. Check for Red Light Violation
+        if (element.lightState === 'RED') {
+            const collisionAreaStart = element.x + 5; // Start just past the stop line
+            const collisionAreaEnd = element.x + element.width;
+            const busFront = bus.x + bus.width;
             
-            const distance = stop.x - (bus.x + bus.width); 
-
-            if (distance > -bus.width && distance < PROXIMITY_THRESHOLD) {
-                isBusStopNear = true; 
-            }
-
-            if (stop.x < -stop.width) {
-                busStops.splice(i, 1);
+            // If bus front is inside the intersection AND speed > 0.1 (not stopped)
+            if (busFront > collisionAreaStart && busFront < collisionAreaEnd && bus.speed > 0.1) {
+                if (!bus.ranRedLight) {
+                    score = Math.max(0, score - 500); // Penalty
+                    bus.ranRedLight = true;
+                }
+            } else if (busFront < collisionAreaStart) {
+                // Bus is approaching, reset ranRedLight flag for the next red light
+                bus.ranRedLight = false;
             }
         }
+        
+        // 3. Element Removal Logic
+        if (element.x < -element.width) {
+            trafficLights.splice(i, 1);
+        }
     }
+    
+    // 4. Maintain the Buffer
+    // Matches the updateBusStops generation pattern.
+    if (trafficLights.length < LIGHT_BUFFER_COUNT) {
+        generateNextTrafficLight();
+    }
+}
+function updateBusStops() {
+    isBusStopNear = false;
+    
+    // Iterate backward to safely remove stops
+    for (let i = busStops.length - 1; i >= 0; i--) {
+        const stop = busStops[i];
+        
+        // 1. Scroll the stop based on bus speed
+        stop.x -= bus.speed; 
+        
+        // 2. Check Proximity (for dashboard/visual cues)
+        const distance = stop.x - (bus.x + bus.width); 
 
+        if (distance > -bus.width && distance < PROXIMITY_THRESHOLD) {
+            isBusStopNear = true; 
+        }
+
+        // 3. Stop Removal Logic
+        if (stop.x < -stop.width) {
+            busStops.splice(i, 1);
+        }
+    }
+    
+    // 4. Maintain the Buffer: If we have fewer than 3 stops, generate a new one
+    // This runs once per frame until the buffer is full again.
+    if (busStops.length < 10) {
+        generateNextBusStop();
+    }
+}
+function initBusStops() {
+    // Start generating stops well off-screen to the right (e.g., 2 screen widths away)
+    furthestStopX = canvas.width * 2; 
+    busStops = []; 
+    
+    // Generate the initial buffer of stops
+    for (let i = 0; i < STOP_BUFFER_COUNT; i++) {
+        generateNextBusStop(); 
+    }
+}
     function drawBusStops() {
         ctx.fillStyle = '#10B981'; 
         
@@ -432,7 +861,10 @@ function generateBusStop() {
 
         ctx.fillStyle = skyColor; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+drawClouds();
+        
+        // NEW: Draw Parallax Buildings
+        drawBuildings();
         ctx.fillStyle = '#333';
         ctx.fillRect(0, ROAD_Y, canvas.width, ROAD_HEIGHT);
 
@@ -681,8 +1113,6 @@ function generateBusStop() {
         
         ctx.fillText(displaySpeed.toString().padStart(2, '0'), canvas.width / 2, center_Y_Position);
         
-        ctx.font = '16px Inter, sans-serif';
-        
         const infoX = canvas.width * 0.75;
         const infoY = canvas.height - dashHeight / 2 - 20;
         
@@ -767,7 +1197,7 @@ function generateBusStop() {
         }
 
         if (fogIntensity > 0.01) {
-            const fogColor = 'rgba(150, 150, 150, 0.2)'; 
+            const fogColor = 'rgba(150, 150, 150, 0.15)'; 
 
             ctx.fillStyle = fogColor;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -1049,7 +1479,7 @@ function initAudioB() {
           gainLevel += 0.0000000000000000000000001;
         } else if (speedTimer < 6.5) {
           frequency -= 4;
-          cfrequency += 4;
+          cfrequency += 1.25;
           gainLevel -= 0.000000000000000000000000001;
         } else if (speedTimer < 11.5) {
           frequency += 0.2;
@@ -1057,7 +1487,7 @@ function initAudioB() {
           gainLevel += 0.0000000000000000000000001;
         } else if (speedTimer < 12.51 && gainLevel >= 0.04) {
           gainLevel = 0.1
-          cfrequency = 900
+          cfrequency = 700
           delay.delayTime.value = 0.0000000000000000000001;
         }
       } else {
@@ -1081,7 +1511,7 @@ function initAudioB() {
       } else {
         frequency = 110;
         gainLevel = 0.001;
-        cfrequency = 900
+        cfrequency = 200
       }
       }
       if (isBraking) {
@@ -1388,7 +1818,6 @@ function updateArticulatedAudio() {
             bus.speed = Math.max(0, bus.speed);
             bus.speed = Math.min(bus.speed, bus.maxSpeed);
 
-            generateBusStop();
             updateBusStops();
         } else {
              if (bus.speed > 0) {
@@ -1417,10 +1846,15 @@ function updateArticulatedAudio() {
         frameCount = 0;
         fpsTimer = 0;
     }
+    const FRAME_TIME = 1 / 60;
+    updateParallax(FRAME_TIME); // ADD THIS LINE
+    drawMinimap();
         update();
         drawRoad();
         drawLaneLines();
+        updateTrafficLights();
         drawBusStops();
+            drawTrafficLights();
         drawBus();
         drawSceneDarkness();
         drawWeather();
@@ -1608,7 +2042,8 @@ function e() {
 
     window.onload = function () {
         resizeCanvas();
-        
+        initBusStops();
+        initTrafficLights();
         const initializeBus = () => {
              processImageForTransparency();
         };
