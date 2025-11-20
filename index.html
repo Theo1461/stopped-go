@@ -542,39 +542,7 @@ function drawTrafficLights() {
     }
     
     function processImageForTransparency() {
-        if (busImage.naturalWidth === 0) {
-            console.error("Image not loaded: naturalWidth is 0. Cannot process transparency.");
-            return;
-        }
-
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = busImage.naturalWidth;
-        tempCanvas.height = busImage.naturalHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-
-        tempCtx.drawImage(busImage, 0, 0);
-
-        try {
-            const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
-            const data = imageData.data;
-
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];     
-                const g = data[i + 1]; 
-                const b = data[i + 2]; 
-
-                if (r > 240 && g > 240 && b > 240) {
-                    data[i + 3] = 0;
-                }
-            }
-
-            tempCtx.putImageData(imageData, 0, 0);
-            processedBusCanvas = tempCanvas;
-            console.log("Bus image processed for transparency.");
-        } catch (e) {
-            console.warn("Could not process image for transparency (Security Taint/CORS issue). Falling back to direct image draw.", e.message);
-            processedBusCanvas = tempCanvas; 
-        }
+        return;
     }
     
     function initWeatherParticles() {
